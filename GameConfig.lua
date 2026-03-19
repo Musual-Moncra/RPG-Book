@@ -18,9 +18,6 @@ local GameConfig = {
 		{"Tool", "Bronze Sword"},
 		{"Tool", "Bronze Pickaxe"},
 		{"Armor", "Bronze Armor"},
-		{"Tool", "Katana"},
-		{"Tool", "LightSword"},
-		{"Accessory", "Cerulean Crown"}
 	},
 	
 	GlobalDrops = { -- {Type, Name, Amount (range/number)*, Chance (xx/yy)*, OnlyOnce*}
@@ -199,7 +196,7 @@ local GameConfig = {
 	DefaultClientRefresh = 0.5, -- Time to check surrounding mobs for boss bars, quests, update backpack, etc.
 	
 	-- Items
-	SellShopItems = false, -- If disabled, the /2 cost rule doesn't apply to shop items and they aren't inherently sellable
+	SellShopItems = true, -- If disabled, the /2 cost rule doesn't apply to shop items and they aren't inherently sellable
 	CanItemsStack = true, -- Obtain multiple of the same item
 	EquippedAccessoryMax = 2, -- Maximum amount of accessories the player can wear at once
 	InventoryUsesArmorBustShot = false, -- If true, all armor icons will be zoomed in to include the head and most of the torso, aka 'bust'. Set to false to show the entire icon
@@ -235,7 +232,7 @@ local GameConfig = {
 	AutoCompleteQuests = true, -- Whether quests will automatically complete when finished
 	DisableWeaponSwitching = true, -- Can the player spam multiple swords w/o being penalized for cooldown
 	LockKeybindWeapon = true, -- If true, players cannot switch weapons while a keybind is active. If false, switching weapons cancels the keybind instead.
-	CanRequestItemWithNoAmountInput = true, -- If enabled, can buy/sell/craft an item w/ count of 1 if the amount input in Amount TextBox is nothing
+	CanRequestItemWithNoAmountInput = false, -- If enabled, can buy/sell/craft an item w/ count of 1 if the amount input in Amount TextBox is nothing
 	
 	HumanoidStatsRefreshWhenAdded = true, -- Attributes like health/mana will stay max if you add to max mana/max hp if enabled to true; else, only changes max attribute
 	
@@ -351,7 +348,7 @@ local GameConfig = {
 			Amplifier = 1, 
 			MaxAllocated = math.huge,
 
-			MethodOfGain = "Multiply",
+			MethodOfGain = "Add",
 		},
 
 		["Constitution"] = {
@@ -802,7 +799,6 @@ local GameConfig = {
 					},
 				},
 
-	
 				-- Thunder: chain lightning — iron + gold, needs a sacrificial sword
 				Thunder = {
 					Description = "Calls down a lightning bolt on hit that chains to nearby enemies, dealing reduced damage with each hop.",
@@ -821,15 +817,8 @@ local GameConfig = {
 						Cooldown    = 1.5,
 					}},
 					Cost = {
-						[1] = { -- apply
-							Statistics = { {"Gold", 50} },
-							Material   = { {"Iron", 10} },
-							Tool       = { {"Bronze Sword", 1} },
-						},
-						[2] = { -- upgrade
-							Statistics = { {"Gold", 30} },
-							Material   = { {"Iron", 6} },
-						},
+						[1] = { Statistics = { {"Gold", 50} }, Material = { {"Iron", 10} }, Tool = { {"Bronze Sword", 1} } },
+						[2] = { Statistics = { {"Gold", 30} }, Material = { {"Iron", 6} } },
 					},
 				},
 
@@ -839,9 +828,7 @@ local GameConfig = {
 					Color       = Color3.fromRGB(80, 200, 80),
 					ValidTypes  = { Tool = true },
 					MaxLevel    = 3,
-					PerLevelStats = {
-						Damage = {"Multiply", 1.05},
-					},
+					PerLevelStats = { Damage = {"Multiply", 1.05} },
 					Suite = {"Poison", {
 						MaxStacks  = 6,
 						TickDamage = 1.5,
@@ -849,14 +836,8 @@ local GameConfig = {
 						Delay      = 0.8,
 					}},
 					Cost = {
-						[1] = { -- apply
-							Statistics = { {"Gold", 30} },
-							Material   = { {"Stone", 8}, {"Iron", 4} },
-						},
-						[2] = { -- upgrade
-							Statistics = { {"Gold", 18} },
-							Material   = { {"Stone", 4}, {"Iron", 2} },
-						},
+						[1] = { Statistics = { {"Gold", 30} }, Material = { {"Stone", 8}, {"Iron", 4} } },
+						[2] = { Statistics = { {"Gold", 18} }, Material = { {"Stone", 4}, {"Iron", 2} } },
 					},
 				},
 
@@ -866,9 +847,7 @@ local GameConfig = {
 					Color       = Color3.fromRGB(200, 180, 50),
 					ValidTypes  = { Tool = true, Armor = true },
 					MaxLevel    = 3,
-					PerLevelStats = {
-						Damage  = {"Add", 3},
-					},
+					PerLevelStats = { Damage = {"Add", 3} },
 					Suite = {"Thorns", {
 						ReflectPercent = 0.35,
 						Duration       = 3,
@@ -876,14 +855,8 @@ local GameConfig = {
 						Cooldown       = 4,
 					}},
 					Cost = {
-						[1] = { -- apply
-							Statistics = { {"Gold", 45} },
-							Material   = { {"Iron", 12} },
-						},
-						[2] = { -- upgrade
-							Statistics = { {"Gold", 25} },
-							Material   = { {"Iron", 7} },
-						},
+						[1] = { Statistics = { {"Gold", 45} }, Material = { {"Iron", 12} } },
+						[2] = { Statistics = { {"Gold", 25} }, Material = { {"Iron", 7} } },
 					},
 				},
 
@@ -893,24 +866,15 @@ local GameConfig = {
 					Color       = Color3.fromRGB(80, 0, 120),
 					ValidTypes  = { Tool = true },
 					MaxLevel    = 3,
-					PerLevelStats = {
-						Damage = {"Multiply", 1.05},
-					},
+					PerLevelStats = { Damage = {"Multiply", 1.05} },
 					Suite = {"Shadow", {
-						DamagePerStack = 2,  -- bonus shadow damage per stack × Level
+						DamagePerStack = 2,
 						MaxStacks      = 5,
 						DecayDelay     = 2.5,
 					}},
 					Cost = {
-						[1] = { -- apply
-							Statistics = { {"Gold", 55} },
-							Material   = { {"Iron", 10} },
-							Tool       = { {"Bronze Sword", 1} },
-						},
-						[2] = { -- upgrade
-							Statistics = { {"Gold", 35} },
-							Material   = { {"Iron", 6} },
-						},
+						[1] = { Statistics = { {"Gold", 55} }, Material = { {"Iron", 10} }, Tool = { {"Bronze Sword", 1} } },
+						[2] = { Statistics = { {"Gold", 35} }, Material = { {"Iron", 6} } },
 					},
 				},
 
@@ -925,21 +889,15 @@ local GameConfig = {
 						KnockbackForce = {"Multiply", 1.10},
 					},
 					Suite = {"Shockwave", {
-						Radius      = 10,
-						Damage      = 6,
-						KBForce     = 60,
-						KBDuration  = 0.4,
-						Cooldown    = 2,
+						Radius     = 10,
+						Damage     = 6,
+						KBForce    = 60,
+						KBDuration = 0.4,
+						Cooldown   = 2,
 					}},
 					Cost = {
-						[1] = { -- apply
-							Statistics = { {"Gold", 40} },
-							Material   = { {"Stone", 12}, {"Iron", 6} },
-						},
-						[2] = { -- upgrade
-							Statistics = { {"Gold", 22} },
-							Material   = { {"Stone", 6}, {"Iron", 3} },
-						},
+						[1] = { Statistics = { {"Gold", 40} }, Material = { {"Stone", 12}, {"Iron", 6} } },
+						[2] = { Statistics = { {"Gold", 22} }, Material = { {"Stone", 6}, {"Iron", 3} } },
 					},
 				},
 
@@ -959,15 +917,162 @@ local GameConfig = {
 						MarkDuration = 5,
 					}},
 					Cost = {
-						[1] = { -- apply
-							Statistics = { {"Gold", 70} },
-							Material   = { {"Iron", 15} },
-							Tool       = { {"Iron Sword", 1} },
-						},
-						[2] = { -- upgrade
-							Statistics = { {"Gold", 45} },
-							Material   = { {"Iron", 9} },
-						},
+						[1] = { Statistics = { {"Gold", 70} }, Material = { {"Iron", 15} }, Tool = { {"Iron Sword", 1} } },
+						[2] = { Statistics = { {"Gold", 45} }, Material = { {"Iron", 9} } },
+					},
+				},
+
+				-- ================================================================
+				--  ARMOR ENCHANTS  (ValidTypes = { Armor = true })
+				--  Suites live in ArmorEnchantSuites.lua
+				-- ================================================================
+
+				IronWill = {
+					Description = "Hardens the wearer's body, granting a flat boost to max HP and noticeably increasing Defense.",
+					Color       = Color3.fromRGB(180, 200, 220),
+					ValidTypes  = { Armor = true },
+					MaxLevel    = 3,
+					Suite = {"ArmorFortify", { BonusHealth = 25, BonusDefense = 0.05 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 35} }, Material = { {"Iron", 8} } },
+						[2] = { Statistics = { {"Gold", 20} }, Material = { {"Iron", 5} } },
+					},
+				},
+
+				Bulwark = {
+					Description = "Forms an absorbing barrier when taking a hit. The shield absorbs a portion of damage before HP is reduced.",
+					Color       = Color3.fromRGB(100, 140, 200),
+					ValidTypes  = { Armor = true },
+					MaxLevel    = 3,
+					Suite = {"ArmorShield", { AbsorbFraction = 0.18, MaxAbsorb = 40, Cooldown = 6 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 50} }, Material = { {"Stone", 12}, {"Iron", 6} } },
+						[2] = { Statistics = { {"Gold", 30} }, Material = { {"Stone", 6}, {"Iron", 3} } },
+					},
+				},
+
+				Regeneration = {
+					Description = "Accelerates the wearer's natural HP regen. After not taking damage for a few seconds, healing pulses resume at a higher rate.",
+					Color       = Color3.fromRGB(80, 220, 120),
+					ValidTypes  = { Armor = true },
+					MaxLevel    = 3,
+					Suite = {"ArmorRegen", { HealPerTick = 4, TickInterval = 2, DelayAfterDmg = 4 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 40} }, Material = { {"Stone", 10}, {"Iron", 4} } },
+						[2] = { Statistics = { {"Gold", 22} }, Material = { {"Stone", 5}, {"Iron", 2} } },
+					},
+				},
+
+				Warden = {
+					Description = "When struck, the Warden's armor fights back — releasing a burst of damage to all nearby enemies.",
+					Color       = Color3.fromRGB(210, 175, 55),
+					ValidTypes  = { Armor = true },
+					MaxLevel    = 3,
+					Suite = {"ArmorRetribution", { RetaliationDamage = 12, Radius = 8, Cooldown = 3 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 55} }, Material = { {"Iron", 14} }, Tool = { {"Bronze Sword", 1} } },
+						[2] = { Statistics = { {"Gold", 32} }, Material = { {"Iron", 7} } },
+					},
+				},
+
+				GlacialPlate = {
+					Description = "The armor radiates cold, slowing any enemy that strikes the wearer. Repeated hits stack more chill on the attacker.",
+					Color       = Color3.fromRGB(160, 225, 255),
+					ValidTypes  = { Armor = true },
+					MaxLevel    = 3,
+					Suite = {"ArmorChillAura", { SlowPerHit = -4, MaxSlow = -20, Duration = 3.5, Cooldown = 1.5 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 45} }, Material = { {"Stone", 15}, {"Iron", 6} } },
+						[2] = { Statistics = { {"Gold", 28} }, Material = { {"Stone", 8}, {"Iron", 3} } },
+					},
+				},
+
+				Spellward = {
+					Description = "Weaves a ward of resistance into the armor, reducing magic (Spell) damage the wearer takes.",
+					Color       = Color3.fromRGB(190, 100, 255),
+					ValidTypes  = { Armor = true },
+					MaxLevel    = 3,
+					Suite = {"ArmorSpellward", { MagicDamageReduction = 0.10, MaxReduction = 0.40 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 60} }, Material = { {"Iron", 12} } },
+						[2] = { Statistics = { {"Gold", 35} }, Material = { {"Iron", 6} } },
+					},
+				},
+
+				-- ================================================================
+				--  ACCESSORY ENCHANTS  (ValidTypes = { Accessory = true })
+				--  Suites live in ArmorEnchantSuites.lua
+				-- ================================================================
+
+				Swiftfoot = {
+					Description = "Enchants footwear or charms to boost movement speed and jump height.",
+					Color       = Color3.fromRGB(130, 255, 200),
+					ValidTypes  = { Accessory = true },
+					MaxLevel    = 3,
+					Suite = {"AccessorySwift", { BonusSpeed = 2, BonusJump = 3 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 30} }, Material = { {"Stone", 6}, {"Iron", 3} } },
+						[2] = { Statistics = { {"Gold", 18} }, Material = { {"Stone", 3}, {"Iron", 2} } },
+					},
+				},
+
+				ArcaneVessel = {
+					Description = "Expands the mana reserve of the wearer and passively speeds up mana recovery after spending it.",
+					Color       = Color3.fromRGB(120, 160, 255),
+					ValidTypes  = { Accessory = true },
+					MaxLevel    = 3,
+					Suite = {"AccessoryManaVessel", { BonusMaxMana = 20, ManaRegenBonus = 0.15 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 45} }, Material = { {"Iron", 8} } },
+						[2] = { Statistics = { {"Gold", 25} }, Material = { {"Iron", 4} } },
+					},
+				},
+
+				LuckyCharm = {
+					Description = "Blesses the wearer with fortune, increasing critical hit chance and boosting drop luck.",
+					Color       = Color3.fromRGB(255, 220, 60),
+					ValidTypes  = { Accessory = true },
+					MaxLevel    = 3,
+					Suite = {"AccessoryLuck", { BonusCritChance = 3, LuckBonus = 0.10 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 25} }, Material = { {"Stone", 5}, {"Iron", 2} } },
+						[2] = { Statistics = { {"Gold", 15} }, Material = { {"Stone", 3} } },
+					},
+				},
+
+				Manaflow = {
+					Description = "Channels mana into each strike. Deals bonus damage equal to a fraction of the wearer's current mana.",
+					Color       = Color3.fromRGB(80, 190, 255),
+					ValidTypes  = { Accessory = true },
+					MaxLevel    = 3,
+					Suite = {"AccessoryManaflow", { DamagePerMana = 0.03, Cooldown = 1.5 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 50} }, Material = { {"Iron", 10} } },
+						[2] = { Statistics = { {"Gold", 28} }, Material = { {"Iron", 5} } },
+					},
+				},
+
+				Ironhide = {
+					Description = "Toughens the wearer's skin. Grants bonus max HP and extra defense the lower their HP drops.",
+					Color       = Color3.fromRGB(160, 130, 100),
+					ValidTypes  = { Accessory = true },
+					MaxLevel    = 3,
+					Suite = {"AccessoryIronhide", { BonusHealth = 30, LowHPDefenseBonus = 0.08, LowHPThreshold = 0.40 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 40} }, Material = { {"Stone", 10}, {"Iron", 8} } },
+						[2] = { Statistics = { {"Gold", 24} }, Material = { {"Stone", 5}, {"Iron", 4} } },
+					},
+				},
+
+				Soulbound = {
+					Description = "Upon lethal damage, activates a death shield — briefly making the wearer immune. Once per long cooldown.",
+					Color       = Color3.fromRGB(220, 80, 255),
+					ValidTypes  = { Accessory = true },
+					MaxLevel    = 3,
+					Suite = {"AccessorySoulbound", { ImmunityDuration = 2.5, Cooldown = 90 }},
+					Cost = {
+						[1] = { Statistics = { {"Gold", 80} }, Material = { {"Iron", 18} }, Tool = { {"Iron Sword", 1} } },
+						[2] = { Statistics = { {"Gold", 50} }, Material = { {"Iron", 10} } },
 					},
 				},
 
@@ -976,10 +1081,14 @@ local GameConfig = {
 		}, -- EnchantConfig
 	
 	
+	---- Kit support UI
 
-	EnableSupportGui = false,
-	SubsetKitID = 1,
-	SubsetKitUsername = "Musual",
+	-- ENABLE THIS IF YOU WANT TO SUPPORT THE ORIGINAL CREATOR, Evercyan
+	-- I have also included a section of the tip for me!! ^.^
+	-- *We appreciate it if you keep the tradition going if you make another kit subset*
+	EnableSupportGui = true,
+	SubsetKitID = 17514739217,
+	SubsetKitUsername = "REEEEEEEEEExD3",
 
 	--[[
 	

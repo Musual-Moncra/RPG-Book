@@ -849,4 +849,363 @@ function Suites:Soulrip(Player, Tool, MobInstance, Level, P)
 	end)
 end
 
+
+--------------------------------------------------------------------------------
+-- ARMOR & ACCESSORY SUITES
+-- Triggered by EnchantLib.OnArmorEquipped / OnArmorUnequipped
+--   and EnchantLib.OnAccessoryEquipped / OnAccessoryUnequipped.
+-- Signature (equip): (Player, _, Level, Properties [, Index])
+-- Signature (clear):  (Player [, Index])
+-- Note: Warden uses the existing "Thorns" suite above (same effect).
+--------------------------------------------------------------------------------
+
+-- Shared armor utilities -------------------------------------------------
+
+local _AoEParams = OverlapParams.new()
+_AoEParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function DamageMobRadius(Player, origin, radius, damage)
+	local parts = workspace:GetPartBoundsInRadius(origin, radius, _AoEParams)
+	local checked = {}
+	for _, part in parts do
+		local model = part:FindFirstAncestorWhichIsA("Model")
+		if model and not checked[model] then
+			checked[model] = true
+			local h = model:FindFirstChild("Enemy") :: Humanoid
+			if h and h.Health > 0 then
+				local mob = Mobs()[model]
+				if mob then
+					DamageLib():DamageMob(Player, mob, { Damage = damage, NoHitSound = true, Ignore = true })
+				end
+			end
+		end
+	end
+end
+
+local ArmorCooldowns = {} -- [uid_key] = expiry
+local function ArmorCdCheck(Player, key, cd)
+	local k = tostring(Player.UserId) .. key
+	local now = os.clock()
+	if ArmorCooldowns[k] and ArmorCooldowns[k] > now then return false end
+	ArmorCooldowns[k] = now + cd
+	return true
+end
+
+local ArmorConns = {} -- [uid_key] = RBXScriptConnection
+local function ArmorStoreConn(Player, key, conn)
+	local k = tostring(Player.UserId) .. key
+	local old = ArmorConns[k]
+	if old then old:Disconnect() end
+	ArmorConns[k] = conn
+end
+local function ArmorClearConn(Player, key)
+	local k = tostring(Player.UserId) .. key
+	local c = ArmorConns[k]
+	if c then c:Disconnect(); ArmorConns[k] = nil end
+end
+
+-- ArmorFortify ---------------------------------------------------------------
+-- IronWill: flat HP + Defense bonus on equip (stored as Humanoid attributes).
+function Suites:ArmorFortify(Player, _, Level, P)
+	local Hum = (Player.Character or {}).Humanoid :: Humanoid
+	if not Hum then return end
+	local hp  = (P.BonusHealth  or 25) * Level
+	local def = (P.BonusDefense or 0.05) * Level
+	local Attr = Hum:FindFirstChild("Attributes")
+	if Attr and Attr:FindFirstChild("Health") then
+		Attr.Health:SetAttribute("EnchantIronWill", hp)
+	end
+	local Stats = Hum:FindFirstChild("Statistics")
+	if Stats and Stats:FindFirstChild("Defense") then
+		Stats.Defense:SetAttribute("EnchantIronWillAdditive", def)
+	end
+end
+function Suites:ArmorFortify_Clear(Player)
+	local Hum = (Player.Character or {}).Humanoid
+	if not Hum then return end
+	local Attr = Hum:FindFirstChild("Attributes")
+	if Attr and Attr:FindFirstChild("Health") then Attr.Health:SetAttribute("EnchantIronWill", nil) end
+	local Stats = Hum:FindFirstChild("Statistics")
+	if Stats and Stats:FindFirstChild("Defense") then Stats.Defense:SetAttribute("EnchantIronWillAdditive", nil) end
+end
+
+-- ArmorShield ----------------------------------------------------------------
+-- Bulwark: absorb a fraction of each incoming hit, subject to cooldown.
+function Suites:ArmorShield(Player, _, Level, P)
+	ArmorClearConn(Player, "Shield")
+	local Char = Player.Character
+	local Hum  = Char and Char:FindFirstChild("Humanoid") :: Humanoid
+	if not Hum or Hum.Health <= 0 then return end
+	local frac = math.min((P.AbsorbFraction or 0.18) * Level, 0.80)
+	local cap  = (P.MaxAbsorb or 40) * Level
+	local cd   = P.Cooldown or 6
+	local prev = Hum.Health
+	local conn = Hum.HealthChanged:Connect(function(new)
+		local delta = prev - new; prev = new
+		if delta <= 0 then return end
+		if not ArmorCdCheck(Player, "Shield", cd) then return end
+		local absorbed = math.min(delta * frac, cap)
+		if absorbed < 1 then return end
+		Hum.Health = math.clamp(Hum.Health + absorbed, 0, Hum.MaxHealth)
+		-- Silver flash
+		local saved = {}
+		if Char then
+			for _, p in Char:GetDescendants() do
+				if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+					saved[p] = p.Color; p.Color = Color3.fromRGB(200, 220, 255)
+				end
+			end
+			task.delay(0.2, function() for p,c in saved do if p.Parent then p.Color=c end end end)
+		end
+	end)
+	ArmorStoreConn(Player, "Shield", conn)
+end
+function Suites:ArmorShield_Clear(Player)
+	ArmorClearConn(Player, "Shield")
+end
+
+-- ArmorRegen -----------------------------------------------------------------
+-- Regeneration: HP heal tick while no damage taken for DelayAfterDmg seconds.
+local RegenLoops = {}
+function Suites:ArmorRegen(Player, _, Level, P)
+	local uid = Player.UserId
+	local old = RegenLoops[uid]; if old then old.running = false end
+	local heal     = (P.HealPerTick   or 4) * Level
+	local interval = P.TickInterval   or 2
+	local delay    = P.DelayAfterDmg  or 4
+	local state = { running = true, lastDmg = -math.huge }
+	RegenLoops[uid] = state
+	local Hum   = (Player.Character or {}).Humanoid :: Humanoid
+	if not Hum then state.running = false; return end
+	local prev = Hum.Health
+	local dc = Hum.HealthChanged:Connect(function(new)
+		if new < prev then state.lastDmg = os.clock() end; prev = new
+	end)
+	task.spawn(function()
+		while state.running do
+			task.wait(interval)
+			if not state.running then break end
+			local h = (Player.Character or {}).Humanoid :: Humanoid
+			if not h or h.Health <= 0 then break end
+			if os.clock() - state.lastDmg >= delay then
+				h.Health = math.clamp(h.Health + heal, 0, h.MaxHealth)
+			end
+		end
+		dc:Disconnect()
+	end)
+end
+function Suites:ArmorRegen_Clear(Player)
+	local s = RegenLoops[Player.UserId]; if s then s.running = false; RegenLoops[Player.UserId] = nil end
+end
+
+-- ArmorChillAura -------------------------------------------------------------
+-- GlacialPlate: slow mobs in melee range when they hit the player.
+local ChillAuraState = {}
+function Suites:ArmorChillAura(Player, _, Level, P)
+	ArmorClearConn(Player, "Chill")
+	local Hum = (Player.Character or {}).Humanoid :: Humanoid
+	if not Hum or Hum.Health <= 0 then return end
+	local slow = P.SlowPerHit or -4
+	local maxS = P.MaxSlow    or -20
+	local dur  = P.Duration   or 3.5
+	local cd   = P.Cooldown   or 1.5
+	local prev = Hum.Health
+	local conn = Hum.HealthChanged:Connect(function(new)
+		local delta = prev - new; prev = new
+		if delta <= 0 then return end
+		local Char = Player.Character; if not Char then return end
+		local parts = workspace:GetPartBoundsInRadius(Char:GetPivot().Position, 8, _AoEParams)
+		local now = os.clock(); local checked = {}
+		for _, part in parts do
+			local mob = part:FindFirstAncestorWhichIsA("Model")
+			if mob and not checked[mob] then
+				checked[mob] = true
+				local h = mob:FindFirstChild("Enemy") :: Humanoid
+				if h and h.Health > 0 then
+					local key = tostring(Player.UserId)..tostring(mob)
+					local st = ChillAuraState[key]
+					if st and st.cdExp and st.cdExp > now then continue end
+					if not st or st.exp <= now then
+						st = { total=0, exp=now+dur, cdExp=0 }
+						ChillAuraState[key] = st
+						task.delay(dur, function()
+							if ChillAuraState[key] then
+								ChillAuraState[key] = nil
+								local ws = h:FindFirstChild("WalkSpeed")
+								if ws and ws.Parent then ws:SetAttribute("EnchantGlacial", nil) end
+								for _, p in mob:GetDescendants() do
+									if p:IsA("BasePart") and p.Name~="HumanoidRootPart" then
+										p.Color = BrickColor.new("Medium stone grey").Color
+									end
+								end
+							end
+						end)
+						for _, p in mob:GetDescendants() do
+							if p:IsA("BasePart") and p.Name~="HumanoidRootPart" then p.Color=Color3.fromRGB(160,225,255) end
+						end
+					else
+						st.exp = now + dur
+					end
+					st.total = math.max(st.total + slow, maxS)
+					st.cdExp = now + cd
+					local ws = h:FindFirstChild("WalkSpeed")
+					if ws then ws:SetAttribute("EnchantGlacial", st.total) end
+				end
+			end
+		end
+	end)
+	ArmorStoreConn(Player, "Chill", conn)
+end
+function Suites:ArmorChillAura_Clear(Player)
+	ArmorClearConn(Player, "Chill")
+end
+
+-- ArmorSpellward -------------------------------------------------------------
+-- Spellward: stores a magic-damage-reduction attribute on the Humanoid.
+function Suites:ArmorSpellward(Player, _, Level, P)
+	local Hum = (Player.Character or {}).Humanoid
+	if not Hum then return end
+	local reduction = math.min((P.MagicDamageReduction or 0.10)*Level, P.MaxReduction or 0.40)
+	Hum:SetAttribute("EnchantSpellwardReduction", reduction)
+end
+function Suites:ArmorSpellward_Clear(Player)
+	local Hum = (Player.Character or {}).Humanoid
+	if Hum then Hum:SetAttribute("EnchantSpellwardReduction", nil) end
+end
+
+-- AccessorySwift -------------------------------------------------------------
+-- Swiftfoot: bonus WalkSpeed + JumpPower per level.
+function Suites:AccessorySwift(Player, _, Level, P, Index)
+	local Hum  = (Player.Character or {}).Humanoid :: Humanoid
+	if not Hum then return end
+	local key  = "EnchantSwift"..(Index or "")
+	local Attr = Hum:FindFirstChild("Attributes"); if not Attr then return end
+	if Attr:FindFirstChild("WalkSpeed") then Attr.WalkSpeed:SetAttribute(key, (P.BonusSpeed or 2)*Level) end
+	if Attr:FindFirstChild("JumpPower") then Attr.JumpPower:SetAttribute(key, (P.BonusJump  or 3)*Level) end
+end
+function Suites:AccessorySwift_Clear(Player, Index)
+	local Hum  = (Player.Character or {}).Humanoid; if not Hum then return end
+	local key  = "EnchantSwift"..(Index or "")
+	local Attr = Hum:FindFirstChild("Attributes"); if not Attr then return end
+	if Attr:FindFirstChild("WalkSpeed") then Attr.WalkSpeed:SetAttribute(key, nil) end
+	if Attr:FindFirstChild("JumpPower") then Attr.JumpPower:SetAttribute(key, nil) end
+end
+
+-- AccessoryManaVessel --------------------------------------------------------
+-- ArcaneVessel: bonus MaxMana + mana regen boost attribute.
+function Suites:AccessoryManaVessel(Player, _, Level, P, Index)
+	local Hum = (Player.Character or {}).Humanoid :: Humanoid; if not Hum then return end
+	local key = "EnchantManaVessel"..(Index or "")
+	local Mana = Hum:FindFirstChild("Mana")
+	if Mana and Mana:FindFirstChild("MaxMana") then
+		Mana.MaxMana:SetAttribute(key, (P.BonusMaxMana or 20)*Level)
+	end
+	Hum:SetAttribute(key.."_RegenBonus", (P.ManaRegenBonus or 0.15)*Level)
+end
+function Suites:AccessoryManaVessel_Clear(Player, Index)
+	local Hum = (Player.Character or {}).Humanoid; if not Hum then return end
+	local key = "EnchantManaVessel"..(Index or "")
+	local Mana = Hum:FindFirstChild("Mana")
+	if Mana and Mana:FindFirstChild("MaxMana") then Mana.MaxMana:SetAttribute(key, nil) end
+	Hum:SetAttribute(key.."_RegenBonus", nil)
+end
+
+-- AccessoryLuck --------------------------------------------------------------
+-- LuckyCharm: bonus CritChance + luck multiplier attributes.
+function Suites:AccessoryLuck(Player, _, Level, P, Index)
+	local Hum = (Player.Character or {}).Humanoid :: Humanoid; if not Hum then return end
+	local key = "EnchantLucky"..(Index or "")
+	Hum:SetAttribute(key.."_CritChance", (P.BonusCritChance or 3)*Level)
+	Hum:SetAttribute(key.."_Luck",       (P.LuckBonus or 0.10)*Level)
+end
+function Suites:AccessoryLuck_Clear(Player, Index)
+	local Hum = (Player.Character or {}).Humanoid; if not Hum then return end
+	local key = "EnchantLucky"..(Index or "")
+	Hum:SetAttribute(key.."_CritChance", nil)
+	Hum:SetAttribute(key.."_Luck", nil)
+end
+
+-- AccessoryManaflow ----------------------------------------------------------
+-- Manaflow: on-hit bonus damage proportional to current mana (on-hit, like Void but no mana cost).
+local ManaflowCds = {}
+function Suites:AccessoryManaflow(Player, Tool, MobInstance, Level, P)
+	local Enemy = MobInstance and MobInstance:FindFirstChild("Enemy") :: Humanoid
+	if not Enemy or Enemy.Health <= 0 then return end
+	local now = os.clock(); local uid = Player.UserId
+	local cd  = P.Cooldown or 1.5
+	if ManaflowCds[uid] and ManaflowCds[uid] > now then return end
+	ManaflowCds[uid] = now + cd
+	local Hum     = (Player.Character or {}).Humanoid
+	local ManaF   = Hum and Hum:FindFirstChild("Mana")
+	local ManaSub = ManaF and ManaF:FindFirstChild("Mana")
+	if not ManaSub then return end
+	local cur = ManaSub:GetAttribute("Default") or 0
+	if cur <= 0 then return end
+	local bonus = math.max(1, math.round(cur * (P.DamagePerMana or 0.03) * Level))
+	local mob = Mobs()[MobInstance]
+	if mob then DamageLib():DamageMob(Player, mob, {Damage=bonus, NoHitSound=true, Ignore=true}) end
+end
+
+-- AccessoryIronhide ----------------------------------------------------------
+-- Ironhide: bonus MaxHP + low-HP defense attribute.
+function Suites:AccessoryIronhide(Player, _, Level, P, Index)
+	local Hum = (Player.Character or {}).Humanoid :: Humanoid; if not Hum then return end
+	local key = "EnchantIronhide"..(Index or "")
+	local Attr = Hum:FindFirstChild("Attributes")
+	if Attr and Attr:FindFirstChild("Health") then Attr.Health:SetAttribute(key, (P.BonusHealth or 30)*Level) end
+	Hum:SetAttribute(key.."_LowHPDef",       (P.LowHPDefenseBonus or 0.08)*Level)
+	Hum:SetAttribute(key.."_LowHPThreshold", P.LowHPThreshold or 0.40)
+end
+function Suites:AccessoryIronhide_Clear(Player, Index)
+	local Hum = (Player.Character or {}).Humanoid; if not Hum then return end
+	local key = "EnchantIronhide"..(Index or "")
+	local Attr = Hum:FindFirstChild("Attributes")
+	if Attr and Attr:FindFirstChild("Health") then Attr.Health:SetAttribute(key, nil) end
+	Hum:SetAttribute(key.."_LowHPDef", nil)
+	Hum:SetAttribute(key.."_LowHPThreshold", nil)
+end
+
+-- AccessorySoulbound ---------------------------------------------------------
+-- Soulbound: intercepts lethal damage → brief immunity window (once per long cooldown).
+local SoulboundCds = {}
+function Suites:AccessorySoulbound(Player, _, Level, P, Index)
+	local connKey = "Soulbound"..(Index or "")
+	ArmorClearConn(Player, connKey)
+	local Char = Player.Character
+	local Hum  = Char and Char:FindFirstChild("Humanoid") :: Humanoid
+	if not Hum or Hum.Health <= 0 then return end
+	local dur = (P.ImmunityDuration or 2.5) * (1 + 0.5*(Level-1))
+	local cd  = P.Cooldown or 90
+	local uid = tostring(Player.UserId)
+	local immune = false
+	local prev   = Hum.Health
+	local conn = Hum.HealthChanged:Connect(function(new)
+		if immune then if new <= 0 then Hum.Health = 1 end; return end
+		local delta = prev - new; prev = new
+		if new > 0 then return end
+		-- lethal damage
+		local now = os.clock()
+		if SoulboundCds[uid] and SoulboundCds[uid] > now then return end
+		SoulboundCds[uid] = now + cd
+		Hum.Health = 1; prev = 1; immune = true
+		local saved = {}
+		if Char then
+			for _, p in Char:GetDescendants() do
+				if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+					saved[p] = p.Color; p.Color = Color3.fromRGB(220,80,255)
+				end
+			end
+		end
+		task.delay(dur, function()
+			immune = false
+			for p,c in saved do if p and p.Parent then p.Color = c end end
+		end)
+	end)
+	ArmorStoreConn(Player, connKey, conn)
+end
+function Suites:AccessorySoulbound_Clear(Player, Index)
+	ArmorClearConn(Player, "Soulbound"..(Index or ""))
+end
+
 return Suites
+
