@@ -109,7 +109,60 @@ function Consumes:Strength(Player, Tool, Properties)
 	-- Set effect
 	local Effect = Statuses:WaitForChild("Strength")
 	Effect:SetAttribute("Duration", Effect:GetAttribute("Duration") + Duration)
-	Effect:SetAttribute("Boost", Multiplier)
+end
+
+function Consumes:Defense(Player, Tool, Properties)
+	if string.find(Tool.Name, "Potion") then PotionBase(Tool) end
+	
+	local Boost = Properties.Boost
+	local Duration = Properties.Duration
+	
+	local Statuses = Player:WaitForChild("Statuses", 1)
+	if not Statuses then 
+		return 
+	end
+	
+	local Effect = Statuses:WaitForChild("Defense")
+	if Effect then
+		Effect:SetAttribute("Duration", Effect:GetAttribute("Duration") + Duration)
+		Effect:SetAttribute("Boost", Boost)
+	end
+end
+
+function Consumes:Experience(Player, Tool, Properties)
+	if string.find(Tool.Name, "Potion") then PotionBase(Tool) end
+	
+	local Multiplier = Properties.Multiplier
+	local Duration = Properties.Duration
+	
+	local Statuses = Player:WaitForChild("Statuses", 1)
+	if not Statuses then 
+		return 
+	end
+	
+	local Effect = Statuses:WaitForChild("Experience")
+	if Effect then
+		Effect:SetAttribute("Duration", Effect:GetAttribute("Duration") + Duration)
+		Effect:SetAttribute("Multiplier", Multiplier)
+	end
+end
+
+function Consumes:Luck(Player, Tool, Properties)
+	if string.find(Tool.Name, "Potion") then PotionBase(Tool) end
+	
+	local Multiplier = Properties.Multiplier
+	local Duration = Properties.Duration
+	
+	local Statuses = Player:WaitForChild("Statuses", 1)
+	if not Statuses then 
+		return 
+	end
+	
+	local Effect = Statuses:WaitForChild("Luck")
+	if Effect then
+		Effect:SetAttribute("Duration", Effect:GetAttribute("Duration") + Duration)
+		Effect:SetAttribute("Multiplier", Multiplier)
+	end
 end
 
 return Consumes

@@ -24,16 +24,6 @@ local ServerStorage     = game:GetService("ServerStorage")
 local Debris            = game:GetService("Debris")
 local RunService        = game:GetService("RunService")
 
---> DataManager integration: resolve pData.Stats for a player
-local _PlayerData -- lazy reference to ReplicatedStorage.PlayerData
-local function GetPDataStats(Player: Player)
-	if not _PlayerData then
-		_PlayerData = ReplicatedStorage:FindFirstChild("PlayerData")
-	end
-	local pData = _PlayerData and _PlayerData:FindFirstChild(tostring(Player.UserId))
-	return pData and pData:FindFirstChild("Stats")
-end
-
 --> Lazy dependencies (avoid circular require with DamageLib)
 local _DamageLib, _Mobs
 local function DamageLib() if not _DamageLib then _DamageLib = require(ServerStorage.Modules.Libraries.Damage) end return _DamageLib end
@@ -375,837 +365,170 @@ function Suites:Void(Player, Tool, MobInstance, Level, P)
 end
 
 --[[
-	"Thunder" suite — releases a lightning bolt on hit that chains to nearby enemies,
-	dealing reduced damage to each subsequent target.
+	"Poison" suite — applies a long-duration toxic effect to the mob.
 	Properties:
-	  Damage       number   base damage to primary target × Level  (default 5)
-	  ChainCount   number   max number of chain targets            (default 2)
-	  ChainRadius  number   studs radius to search for chain target (default 12)
-	  ChainDecay   number   damage multiplier per chain hop        (default 0.6)
-	  Cooldown     number   seconds between thunder bursts         (default 1.5)
+	  Ticks   number   damage tick count        (default 10)
+	  Delay   number   seconds between ticks    (default 1.0)
+	  Damage  number   damage per tick × Level  (default 1)
 ]]
-local ThunderCooldowns = {}
--- Overlap params shared across Thunder calls to avoid re-alloc each hit
-local _ThunderOverlapParams = OverlapParams.new()
-_ThunderOverlapParams.FilterType = Enum.RaycastFilterType.Exclude
-function Suites:Thunder(Player, Tool, MobInstance, Level, P)
-	local Enemy = MobInstance:FindFirstChild("Enemy") :: Humanoid
-	if not Enemy or Enemy.Health <= 0 then return end
-
-	local now      = os.clock()
-	local uid      = Player.UserId
-	local cooldown = P.Cooldown or 1.5
-	if ThunderCooldowns[uid] and ThunderCooldowns[uid] > now then return end
-	ThunderCooldowns[uid] = now + cooldown
-
-	local damage     = (P.Damage    or 5) * Level
-	local chainCount = P.ChainCount or 2
-	local radius     = P.ChainRadius or 12
-	local decay      = P.ChainDecay  or 0.6
-
-	-- Brief yellow flash on hit mob
-	local function FlashYellow(mob)
-		local saved = {}
-		for _, part in mob:GetDescendants() do
-			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-				saved[part] = part.Color
-				part.Color = Color3.fromRGB(255, 240, 60)
-			end
-		end
-		task.delay(0.12, function()
-			for part, c in saved do
-				if part and part.Parent then part.Color = c end
-			end
-		end)
-	end
-
-	-- Finds the nearest unhit mob within radius using a spatial parts query.
-	-- Much cheaper than workspace:GetDescendants() on large maps.
-	local function FindNearestMob(origin: Vector3, excludeSet: {[Model]: true})
-		local parts = workspace:GetPartBoundsInRadius(origin, radius, _ThunderOverlapParams)
-		local best, bestDist = nil, radius + 1
-		for _, part in parts do
-			local model = part:FindFirstAncestorWhichIsA("Model")
-			if model and not excludeSet[model] then
-				local h = model:FindFirstChild("Enemy") :: Humanoid
-				if h and h.Health > 0 then
-					local d = (model:GetPivot().Position - origin).Magnitude
-					if d < bestDist then bestDist = d; best = model end
-				end
-			end
-		end
-		return best
-	end
-
-	-- Initial hit
-	DamageTick(Player, MobInstance, damage)
-	FlashYellow(MobInstance)
-
-	-- Chain to nearby mobs
-	task.spawn(function()
-		local hit = { [MobInstance] = true }
-		local currentMob = MobInstance
-		local currentDmg = damage
-
-		for _ = 1, chainCount do
-			task.wait(0.12)
-			currentDmg = currentDmg * decay
-			local nearest = FindNearestMob(currentMob:GetPivot().Position, hit)
-			if not nearest then break end
-			hit[nearest] = true
-			DamageTick(Player, nearest, math.max(1, math.round(currentDmg)))
-			FlashYellow(nearest)
-			currentMob = nearest
-		end
-	end)
-end
-
---[[
-	"Poison" suite — coats the target in venom, dealing stacking poison ticks.
-	Each hit adds one stack (up to MaxStacks); damage per tick scales with stacks.
-	Properties:
-	  MaxStacks   number   max poison stacks                   (default 6)
-	  TickDamage  number   damage per stack per tick × Level   (default 1.5)
-	  Ticks       number   total ticks in the poison window    (default 5)
-	  Delay       number   seconds between ticks               (default 0.8)
-]]
-local PoisonState = {} -- [uid_mob] = {stacks, expiry, loop}
 function Suites:Poison(Player, Tool, MobInstance, Level, P)
 	local Enemy = MobInstance:FindFirstChild("Enemy") :: Humanoid
 	if not Enemy or Enemy.Health <= 0 then return end
 
-	local maxStacks = P.MaxStacks  or 6
-	local tickDmg   = (P.TickDamage or 1.5) * Level
-	local ticks     = P.Ticks      or 5
-	local delay     = P.Delay      or 0.8
-	local duration  = ticks * delay
+	local ticks    = P.Ticks  or 10
+	local delay    = P.Delay  or 1.0
+	local damage   = (P.Damage or 1) * Level
+	local duration = ticks * delay
 
-	local key = tostring(Player.UserId) .. tostring(MobInstance)
-	local now = os.clock()
-	local state = PoisonState[key]
-
-	if state and state.expiry > now then
-		-- Add a stack and refresh
-		state.stacks = math.min(state.stacks + 1, maxStacks)
-		state.expiry = now + duration
-		return
-	end
-
-	-- Fresh poison
-	PoisonState[key] = { stacks = 1, expiry = now + duration }
+	if not CanStartDoT(Player, MobInstance, "Poison", duration) then return end
 
 	if Effects:FindFirstChild("Poison") then
 		AddParticles(MobInstance, duration, Effects.Poison)
 	end
-
+	
 	task.spawn(function()
 		for _ = 1, ticks do
 			if Enemy.Health <= 0 then break end
-			local cur = PoisonState[key]
-			if not cur then break end
-			DamageTick(Player, MobInstance, tickDmg * cur.stacks)
-			-- Green tint
+			DamageTick(Player, MobInstance, damage)
 			for _, part in MobInstance:GetDescendants() do
 				if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-					part.Color = Color3.fromRGB(60, 160 + cur.stacks * 8, 60)
+					part.Color = Color3.fromRGB(100, 200, 100)
 				end
 			end
-			task.wait(delay)
-		end
-		-- Restore color
-		for _, part in MobInstance:GetDescendants() do
-			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-				part.Color = BrickColor.new("Medium stone grey").Color
-			end
-		end
-		PoisonState[key] = nil
-	end)
-end
-
---[[
-	"Thorns" suite — wraps the player in a protective aura after hitting.
-	For a short window, any damage the player takes is reflected back at enemies
-	in a small AoE around them.
-	Properties:
-	  ReflectPercent  number   fraction of incoming damage reflected (default 0.4)
-	  Duration        number   seconds the thorns aura lasts        (default 3)
-	  Radius          number   studs radius to reflect to           (default 10)
-	  Cooldown        number   seconds before thorns can re-trigger (default 4)
-]]
-local ThornsCooldowns = {}
-local ThornsActive    = {} -- [uid] = {conn, overlapParams}
-local _ThornsOverlapParams = OverlapParams.new()
-_ThornsOverlapParams.FilterType = Enum.RaycastFilterType.Exclude
-function Suites:Thorns(Player, Tool, MobInstance, Level, P)
-	local Character = Player.Character
-	local Humanoid  = Character and Character:FindFirstChild("Humanoid") :: Humanoid
-	if not Humanoid or Humanoid.Health <= 0 then return end
-
-	local now = os.clock()
-	local uid = Player.UserId
-	local cooldown = P.Cooldown or 4
-	if ThornsCooldowns[uid] and ThornsCooldowns[uid] > now then return end
-	ThornsCooldowns[uid] = now + cooldown
-
-	local reflectPct = (P.ReflectPercent or 0.4) * Level
-	local duration   = P.Duration or 3
-	local radius     = P.Radius   or 10
-
-	-- Disconnect previous aura if any
-	local existing = ThornsActive[uid]
-	if existing then
-		existing:Disconnect()
-		ThornsActive[uid] = nil
-	end
-
-	-- Golden thorns tint on player
-	local savedColors = {}
-	for _, part in Character:GetDescendants() do
-		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-			savedColors[part] = part.Color
-			part.Color = Color3.fromRGB(200, 180, 50)
-		end
-	end
-
-	-- IMPORTANT: HealthChanged fires AFTER Humanoid.Health has already been updated to
-	-- `newHealth`. Reading `Humanoid.Health` inside the callback gives the same value as
-	-- `newHealth`, so subtracting them always yields 0. We track prevHealth manually.
-	local prevHealth = Humanoid.Health
-	local conn = Humanoid.HealthChanged:Connect(function(newHealth)
-		local delta = prevHealth - newHealth  -- positive = damage received
-		prevHealth  = newHealth               -- always update for next callback
-		if delta <= 0 then return end         -- healing or no change — skip
-
-		local reflectDmg = math.max(1, math.round(delta * reflectPct))
-		local playerPos  = Character:GetPivot().Position
-
-		-- Use spatial query instead of GetDescendants for performance
-		local parts = workspace:GetPartBoundsInRadius(playerPos, radius, _ThornsOverlapParams)
-		local checked = {}
-		for _, part in parts do
-			local model = part:FindFirstAncestorWhichIsA("Model")
-			if model and not checked[model] then
-				checked[model] = true
-				local h = model:FindFirstChild("Enemy") :: Humanoid
-				if h and h.Health > 0 then
-					DamageTick(Player, model, reflectDmg)
-				end
-			end
-		end
-	end)
-
-	ThornsActive[uid] = conn
-
-	task.delay(duration, function()
-		conn:Disconnect()
-		if ThornsActive[uid] == conn then ThornsActive[uid] = nil end
-		-- Restore player color
-		for part, c in savedColors do
-			if part and part.Parent then part.Color = c end
-		end
-	end)
-end
-
---[[
-	"Shadow" suite — after hitting an enemy, the player plunges deeper into shadow,
-	building momentum with each strike. Each stack deals a bonus void-like shadow
-	damage tick that scales with the number of hits landed in quick succession.
-	Stacks decay if the player stops attacking.
-
-	WHY NOT A CRIT BONUS:
-	  Damage.lua resolves crits through external CriticalModifier modules loaded from
-	  `script.Critical`. Those modules receive (Player, Tool, UnitCritChance, CritDmg)
-	  and are not hookable from EnchantsSuites without modifying DamageLib itself.
-	  A DamageTick bonus is equivalent in power and works through the proven Ignore=true
-	  path that all DoT-style enchants already use.
-
-	Properties:
-	  DamagePerStack number   bonus shadow damage per stack × Level  (default 2)
-	  MaxStacks      number   max shadow stacks                       (default 5)
-	  DecayDelay     number   seconds of inactivity before a stack decays (default 2.5)
-]]
-local ShadowStacks = {} -- [uid] = {stacks, lastHit}
-function Suites:Shadow(Player, Tool, MobInstance, Level, P)
-	local Character = Player.Character
-	local Humanoid  = Character and Character:FindFirstChild("Humanoid") :: Humanoid
-	if not Humanoid or Humanoid.Health <= 0 then return end
-
-	local Enemy = MobInstance:FindFirstChild("Enemy") :: Humanoid
-	if not Enemy or Enemy.Health <= 0 then return end
-
-	local dmgPerStack = (P.DamagePerStack or 2) * Level
-	local maxStacks   = P.MaxStacks   or 5
-	local decayDelay  = P.DecayDelay  or 2.5
-	local uid         = Player.UserId
-	local now         = os.clock()
-
-	local state = ShadowStacks[uid]
-	if not state then
-		state = { stacks = 0, lastHit = now }
-		ShadowStacks[uid] = state
-
-		-- Decay loop: one stack is removed per decayDelay window of inactivity
-		task.spawn(function()
-			while ShadowStacks[uid] do
-				task.wait(0.5)
-				local s = ShadowStacks[uid]
-				if not s then break end
-				if os.clock() - s.lastHit >= decayDelay then
-					s.stacks = s.stacks - 1
-					if s.stacks <= 0 then
-						ShadowStacks[uid] = nil
-						-- Restore character color on full decay
-						local char = Player.Character
-						if char then
-							for _, part in char:GetDescendants() do
-								if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-									part.Color = BrickColor.new("Medium stone grey").Color
-								end
-							end
-						end
-						break
-					end
-				end
-			end
-		end)
-	end
-
-	state.stacks  = math.min(state.stacks + 1, maxStacks)
-	state.lastHit = now
-
-	-- Deal a shadow damage tick to the mob proportional to current stacks.
-	-- Goes through DamageTick (Ignore=true, NoHitSound=true) — the same authoritative
-	-- path used by Fire, Bleed, Poison, etc. Damage.lua's defense still applies.
-	if state.stacks > 0 then
-		DamageTick(Player, MobInstance, math.round(dmgPerStack * state.stacks))
-	end
-
-	-- Dark tint proportional to stacks (cosmetic feedback for the player)
-	local alpha = state.stacks / maxStacks
-	for _, part in Character:GetDescendants() do
-		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-			part.Color = Color3.fromRGB(
-				math.round(40 * alpha),
-				math.round(10 * alpha),
-				math.round(60 * alpha)
-			)
-		end
-	end
-end
-
---[[
-	"Shockwave" suite — emits a ground shockwave on hit, damaging and knocking
-	back all enemies within the blast radius.
-	Properties:
-	  Radius      number   AoE radius in studs                       (default 10)
-	  Damage      number   AoE damage × Level                        (default 6)
-	  KBForce     number   knockback impulse magnitude               (default 60)
-	  KBDuration  number   seconds enemies are staggered             (default 0.4)
-	  Cooldown    number   seconds between shockwaves                (default 2)
-]]
-local ShockwaveCooldowns = {}
-function Suites:Shockwave(Player, Tool, MobInstance, Level, P)
-	local Enemy = MobInstance:FindFirstChild("Enemy") :: Humanoid
-	if not Enemy or Enemy.Health <= 0 then return end
-
-	local now      = os.clock()
-	local uid      = Player.UserId
-	local cooldown = P.Cooldown or 2
-	if ShockwaveCooldowns[uid] and ShockwaveCooldowns[uid] > now then return end
-	ShockwaveCooldowns[uid] = now + cooldown
-
-	local radius     = P.Radius     or 10
-	local damage     = (P.Damage    or 6) * Level
-	local kbForce    = P.KBForce    or 60
-	local kbDuration = P.KBDuration or 0.4
-
-	local origin = MobInstance:GetPivot().Position
-
-	-- Spatial AoE search: GetPartBoundsInRadius is far cheaper than GetDescendants
-	-- on maps with many objects. We de-duplicate by model to avoid double-hitting.
-	local _shockwaveParams = OverlapParams.new()
-	_shockwaveParams.FilterType = Enum.RaycastFilterType.Exclude
-	local parts = workspace:GetPartBoundsInRadius(origin, radius, _shockwaveParams)
-	local checked = {}
-	for _, part in parts do
-		local obj = part:FindFirstAncestorWhichIsA("Model")
-		if obj and not checked[obj] then
-			checked[obj] = true
-			local h = obj:FindFirstChild("Enemy") :: Humanoid
-			if h and h.Health > 0 then
-				local mobPos = obj:GetPivot().Position
-				DamageTick(Player, obj, damage)
-				-- Knockback via RootPart impulse, directed away from origin
-				local root = obj:FindFirstChild("HumanoidRootPart") :: BasePart
-				if root and root:IsA("BasePart") then
-					local dir = (mobPos - origin)
-					if dir.Magnitude > 0 then dir = dir.Unit end
-					root:ApplyImpulse((dir + Vector3.new(0, 0.3, 0)) * kbForce)
-				end
-				-- Stun (zero walk speed briefly)
-				local WalkSpeed = h:FindFirstChild("WalkSpeed")
-				if WalkSpeed then
-					WalkSpeed:SetAttribute("EnchantShockwave", -9999)
-					task.delay(kbDuration, function()
-						if WalkSpeed and WalkSpeed.Parent then
-							WalkSpeed:SetAttribute("EnchantShockwave", nil)
-						end
-					end)
-				end
-			end
-		end
-	end
-
-	-- White ring flash at origin
-	local part = Instance.new("Part")
-	part.Anchored       = true
-	part.CanCollide     = false
-	part.CastShadow     = false
-	part.Shape          = Enum.PartType.Cylinder
-	part.Size           = Vector3.new(0.4, radius * 2, radius * 2)
-	part.CFrame         = CFrame.new(origin) * CFrame.Angles(0, 0, math.pi / 2)
-	part.Color          = Color3.new(1, 1, 1)
-	part.Material       = Enum.Material.Neon
-	part.Transparency   = 0.3
-	part.Parent         = workspace
-	Debris:AddItem(part, 0.25)
-end
-
---[[
-	"Soulrip" suite — tears the soul from defeated enemies, granting bonus Gold
-	and XP on mob kills while the soulrip mark is active.
-	The mark is applied on hit; if the marked mob dies within the window it drops bonus rewards.
-	Properties:
-	  GoldBonus    number   flat bonus Gold on the kill × Level     (default 10)
-	  XPBonus      number   flat bonus XP on the kill × Level       (default 15)
-	  MarkDuration number   seconds the mark lasts                  (default 5)
-]]
-local SoulripMarks = {} -- [mob] = {player, expiry, goldBonus, xpBonus}
-function Suites:Soulrip(Player, Tool, MobInstance, Level, P)
-	local Enemy = MobInstance:FindFirstChild("Enemy") :: Humanoid
-	if not Enemy or Enemy.Health <= 0 then return end
-
-	local goldBonus    = (P.GoldBonus    or 10) * Level
-	local xpBonus      = (P.XPBonus      or 15) * Level
-	local markDuration = P.MarkDuration  or 5
-
-	local now = os.clock()
-	local existing = SoulripMarks[MobInstance]
-	if existing and existing.expiry > now then
-		-- Refresh and stack bonuses
-		existing.expiry    = now + markDuration
-		existing.goldBonus = existing.goldBonus + goldBonus
-		existing.xpBonus   = existing.xpBonus  + xpBonus
-		return
-	end
-
-	SoulripMarks[MobInstance] = {
-		player    = Player,
-		expiry    = now + markDuration,
-		goldBonus = goldBonus,
-		xpBonus   = xpBonus,
-	}
-
-	-- Purple soul aura on the mob
-	for _, part in MobInstance:GetDescendants() do
-		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-			part.Color = Color3.fromRGB(100, 0, 160)
-		end
-	end
-
-	-- Listen for death within window
-	local conn
-	conn = Enemy.Died:Connect(function()
-		conn:Disconnect()
-		local mark = SoulripMarks[MobInstance]
-		if not mark or os.clock() > mark.expiry then return end
-		SoulripMarks[MobInstance] = nil
-
-		local p = mark.player
-		if not p or not p.Parent then return end
-
-		-- Per DataManager, the real data lives in ReplicatedStorage.PlayerData.[UserId].Stats
-		-- leaderstats is a display-only folder and writing to it does NOT persist.
-		local pStats = GetPDataStats(p)
-		if not pStats then return end
-
-		local Gold = pStats:FindFirstChild("Gold")
-		local XP   = pStats:FindFirstChild("XP")
-		if Gold then Gold.Value = Gold.Value + math.round(mark.goldBonus) end
-		if XP   then XP.Value   = XP.Value   + math.round(mark.xpBonus)  end
-	end)
-
-	-- Auto-clear mark and color after duration
-	task.delay(markDuration, function()
-		if SoulripMarks[MobInstance] then
-			SoulripMarks[MobInstance] = nil
+			task.wait(0.2)
 			for _, part in MobInstance:GetDescendants() do
 				if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
 					part.Color = BrickColor.new("Medium stone grey").Color
 				end
 			end
-		end
-		if conn.Connected then conn:Disconnect() end
-	end)
-end
-
-
---------------------------------------------------------------------------------
--- ARMOR & ACCESSORY SUITES
--- Triggered by EnchantLib.OnArmorEquipped / OnArmorUnequipped
---   and EnchantLib.OnAccessoryEquipped / OnAccessoryUnequipped.
--- Signature (equip): (Player, _, Level, Properties [, Index])
--- Signature (clear):  (Player [, Index])
--- Note: Warden uses the existing "Thorns" suite above (same effect).
---------------------------------------------------------------------------------
-
--- Shared armor utilities -------------------------------------------------
-
-local _AoEParams = OverlapParams.new()
-_AoEParams.FilterType = Enum.RaycastFilterType.Exclude
-
-local function DamageMobRadius(Player, origin, radius, damage)
-	local parts = workspace:GetPartBoundsInRadius(origin, radius, _AoEParams)
-	local checked = {}
-	for _, part in parts do
-		local model = part:FindFirstAncestorWhichIsA("Model")
-		if model and not checked[model] then
-			checked[model] = true
-			local h = model:FindFirstChild("Enemy") :: Humanoid
-			if h and h.Health > 0 then
-				local mob = Mobs()[model]
-				if mob then
-					DamageLib():DamageMob(Player, mob, { Damage = damage, NoHitSound = true, Ignore = true })
-				end
-			end
-		end
-	end
-end
-
-local ArmorCooldowns = {} -- [uid_key] = expiry
-local function ArmorCdCheck(Player, key, cd)
-	local k = tostring(Player.UserId) .. key
-	local now = os.clock()
-	if ArmorCooldowns[k] and ArmorCooldowns[k] > now then return false end
-	ArmorCooldowns[k] = now + cd
-	return true
-end
-
-local ArmorConns = {} -- [uid_key] = RBXScriptConnection
-local function ArmorStoreConn(Player, key, conn)
-	local k = tostring(Player.UserId) .. key
-	local old = ArmorConns[k]
-	if old then old:Disconnect() end
-	ArmorConns[k] = conn
-end
-local function ArmorClearConn(Player, key)
-	local k = tostring(Player.UserId) .. key
-	local c = ArmorConns[k]
-	if c then c:Disconnect(); ArmorConns[k] = nil end
-end
-
--- ArmorFortify ---------------------------------------------------------------
--- IronWill: flat HP + Defense bonus on equip (stored as Humanoid attributes).
-function Suites:ArmorFortify(Player, _, Level, P)
-	local Hum = (Player.Character or {}).Humanoid :: Humanoid
-	if not Hum then return end
-	local hp  = (P.BonusHealth  or 25) * Level
-	local def = (P.BonusDefense or 0.05) * Level
-	local Attr = Hum:FindFirstChild("Attributes")
-	if Attr and Attr:FindFirstChild("Health") then
-		Attr.Health:SetAttribute("EnchantIronWill", hp)
-	end
-	local Stats = Hum:FindFirstChild("Statistics")
-	if Stats and Stats:FindFirstChild("Defense") then
-		Stats.Defense:SetAttribute("EnchantIronWillAdditive", def)
-	end
-end
-function Suites:ArmorFortify_Clear(Player)
-	local Hum = (Player.Character or {}).Humanoid
-	if not Hum then return end
-	local Attr = Hum:FindFirstChild("Attributes")
-	if Attr and Attr:FindFirstChild("Health") then Attr.Health:SetAttribute("EnchantIronWill", nil) end
-	local Stats = Hum:FindFirstChild("Statistics")
-	if Stats and Stats:FindFirstChild("Defense") then Stats.Defense:SetAttribute("EnchantIronWillAdditive", nil) end
-end
-
--- ArmorShield ----------------------------------------------------------------
--- Bulwark: absorb a fraction of each incoming hit, subject to cooldown.
-function Suites:ArmorShield(Player, _, Level, P)
-	ArmorClearConn(Player, "Shield")
-	local Char = Player.Character
-	local Hum  = Char and Char:FindFirstChild("Humanoid") :: Humanoid
-	if not Hum or Hum.Health <= 0 then return end
-	local frac = math.min((P.AbsorbFraction or 0.18) * Level, 0.80)
-	local cap  = (P.MaxAbsorb or 40) * Level
-	local cd   = P.Cooldown or 6
-	local prev = Hum.Health
-	local conn = Hum.HealthChanged:Connect(function(new)
-		local delta = prev - new; prev = new
-		if delta <= 0 then return end
-		if not ArmorCdCheck(Player, "Shield", cd) then return end
-		local absorbed = math.min(delta * frac, cap)
-		if absorbed < 1 then return end
-		Hum.Health = math.clamp(Hum.Health + absorbed, 0, Hum.MaxHealth)
-		-- Silver flash
-		local saved = {}
-		if Char then
-			for _, p in Char:GetDescendants() do
-				if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-					saved[p] = p.Color; p.Color = Color3.fromRGB(200, 220, 255)
-				end
-			end
-			task.delay(0.2, function() for p,c in saved do if p.Parent then p.Color=c end end end)
+			task.wait(delay - 0.2)
 		end
 	end)
-	ArmorStoreConn(Player, "Shield", conn)
-end
-function Suites:ArmorShield_Clear(Player)
-	ArmorClearConn(Player, "Shield")
 end
 
--- ArmorRegen -----------------------------------------------------------------
--- Regeneration: HP heal tick while no damage taken for DelayAfterDmg seconds.
-local RegenLoops = {}
-function Suites:ArmorRegen(Player, _, Level, P)
-	local uid = Player.UserId
-	local old = RegenLoops[uid]; if old then old.running = false end
-	local heal     = (P.HealPerTick   or 4) * Level
-	local interval = P.TickInterval   or 2
-	local delay    = P.DelayAfterDmg  or 4
-	local state = { running = true, lastDmg = -math.huge }
-	RegenLoops[uid] = state
-	local Hum   = (Player.Character or {}).Humanoid :: Humanoid
-	if not Hum then state.running = false; return end
-	local prev = Hum.Health
-	local dc = Hum.HealthChanged:Connect(function(new)
-		if new < prev then state.lastDmg = os.clock() end; prev = new
-	end)
-	task.spawn(function()
-		while state.running do
-			task.wait(interval)
-			if not state.running then break end
-			local h = (Player.Character or {}).Humanoid :: Humanoid
-			if not h or h.Health <= 0 then break end
-			if os.clock() - state.lastDmg >= delay then
-				h.Health = math.clamp(h.Health + heal, 0, h.MaxHealth)
-			end
-		end
-		dc:Disconnect()
-	end)
-end
-function Suites:ArmorRegen_Clear(Player)
-	local s = RegenLoops[Player.UserId]; if s then s.running = false; RegenLoops[Player.UserId] = nil end
-end
-
--- ArmorChillAura -------------------------------------------------------------
--- GlacialPlate: slow mobs in melee range when they hit the player.
-local ChillAuraState = {}
-function Suites:ArmorChillAura(Player, _, Level, P)
-	ArmorClearConn(Player, "Chill")
-	local Hum = (Player.Character or {}).Humanoid :: Humanoid
-	if not Hum or Hum.Health <= 0 then return end
-	local slow = P.SlowPerHit or -4
-	local maxS = P.MaxSlow    or -20
-	local dur  = P.Duration   or 3.5
-	local cd   = P.Cooldown   or 1.5
-	local prev = Hum.Health
-	local conn = Hum.HealthChanged:Connect(function(new)
-		local delta = prev - new; prev = new
-		if delta <= 0 then return end
-		local Char = Player.Character; if not Char then return end
-		local parts = workspace:GetPartBoundsInRadius(Char:GetPivot().Position, 8, _AoEParams)
-		local now = os.clock(); local checked = {}
-		for _, part in parts do
-			local mob = part:FindFirstAncestorWhichIsA("Model")
-			if mob and not checked[mob] then
-				checked[mob] = true
-				local h = mob:FindFirstChild("Enemy") :: Humanoid
-				if h and h.Health > 0 then
-					local key = tostring(Player.UserId)..tostring(mob)
-					local st = ChillAuraState[key]
-					if st and st.cdExp and st.cdExp > now then continue end
-					if not st or st.exp <= now then
-						st = { total=0, exp=now+dur, cdExp=0 }
-						ChillAuraState[key] = st
-						task.delay(dur, function()
-							if ChillAuraState[key] then
-								ChillAuraState[key] = nil
-								local ws = h:FindFirstChild("WalkSpeed")
-								if ws and ws.Parent then ws:SetAttribute("EnchantGlacial", nil) end
-								for _, p in mob:GetDescendants() do
-									if p:IsA("BasePart") and p.Name~="HumanoidRootPart" then
-										p.Color = BrickColor.new("Medium stone grey").Color
-									end
-								end
-							end
-						end)
-						for _, p in mob:GetDescendants() do
-							if p:IsA("BasePart") and p.Name~="HumanoidRootPart" then p.Color=Color3.fromRGB(160,225,255) end
-						end
-					else
-						st.exp = now + dur
-					end
-					st.total = math.max(st.total + slow, maxS)
-					st.cdExp = now + cd
-					local ws = h:FindFirstChild("WalkSpeed")
-					if ws then ws:SetAttribute("EnchantGlacial", st.total) end
-				end
-			end
-		end
-	end)
-	ArmorStoreConn(Player, "Chill", conn)
-end
-function Suites:ArmorChillAura_Clear(Player)
-	ArmorClearConn(Player, "Chill")
-end
-
--- ArmorSpellward -------------------------------------------------------------
--- Spellward: stores a magic-damage-reduction attribute on the Humanoid.
-function Suites:ArmorSpellward(Player, _, Level, P)
-	local Hum = (Player.Character or {}).Humanoid
-	if not Hum then return end
-	local reduction = math.min((P.MagicDamageReduction or 0.10)*Level, P.MaxReduction or 0.40)
-	Hum:SetAttribute("EnchantSpellwardReduction", reduction)
-end
-function Suites:ArmorSpellward_Clear(Player)
-	local Hum = (Player.Character or {}).Humanoid
-	if Hum then Hum:SetAttribute("EnchantSpellwardReduction", nil) end
-end
-
--- AccessorySwift -------------------------------------------------------------
--- Swiftfoot: bonus WalkSpeed + JumpPower per level.
-function Suites:AccessorySwift(Player, _, Level, P, Index)
-	local Hum  = (Player.Character or {}).Humanoid :: Humanoid
-	if not Hum then return end
-	local key  = "EnchantSwift"..(Index or "")
-	local Attr = Hum:FindFirstChild("Attributes"); if not Attr then return end
-	if Attr:FindFirstChild("WalkSpeed") then Attr.WalkSpeed:SetAttribute(key, (P.BonusSpeed or 2)*Level) end
-	if Attr:FindFirstChild("JumpPower") then Attr.JumpPower:SetAttribute(key, (P.BonusJump  or 3)*Level) end
-end
-function Suites:AccessorySwift_Clear(Player, Index)
-	local Hum  = (Player.Character or {}).Humanoid; if not Hum then return end
-	local key  = "EnchantSwift"..(Index or "")
-	local Attr = Hum:FindFirstChild("Attributes"); if not Attr then return end
-	if Attr:FindFirstChild("WalkSpeed") then Attr.WalkSpeed:SetAttribute(key, nil) end
-	if Attr:FindFirstChild("JumpPower") then Attr.JumpPower:SetAttribute(key, nil) end
-end
-
--- AccessoryManaVessel --------------------------------------------------------
--- ArcaneVessel: bonus MaxMana + mana regen boost attribute.
-function Suites:AccessoryManaVessel(Player, _, Level, P, Index)
-	local Hum = (Player.Character or {}).Humanoid :: Humanoid; if not Hum then return end
-	local key = "EnchantManaVessel"..(Index or "")
-	local Mana = Hum:FindFirstChild("Mana")
-	if Mana and Mana:FindFirstChild("MaxMana") then
-		Mana.MaxMana:SetAttribute(key, (P.BonusMaxMana or 20)*Level)
-	end
-	Hum:SetAttribute(key.."_RegenBonus", (P.ManaRegenBonus or 0.15)*Level)
-end
-function Suites:AccessoryManaVessel_Clear(Player, Index)
-	local Hum = (Player.Character or {}).Humanoid; if not Hum then return end
-	local key = "EnchantManaVessel"..(Index or "")
-	local Mana = Hum:FindFirstChild("Mana")
-	if Mana and Mana:FindFirstChild("MaxMana") then Mana.MaxMana:SetAttribute(key, nil) end
-	Hum:SetAttribute(key.."_RegenBonus", nil)
-end
-
--- AccessoryLuck --------------------------------------------------------------
--- LuckyCharm: bonus CritChance + luck multiplier attributes.
-function Suites:AccessoryLuck(Player, _, Level, P, Index)
-	local Hum = (Player.Character or {}).Humanoid :: Humanoid; if not Hum then return end
-	local key = "EnchantLucky"..(Index or "")
-	Hum:SetAttribute(key.."_CritChance", (P.BonusCritChance or 3)*Level)
-	Hum:SetAttribute(key.."_Luck",       (P.LuckBonus or 0.10)*Level)
-end
-function Suites:AccessoryLuck_Clear(Player, Index)
-	local Hum = (Player.Character or {}).Humanoid; if not Hum then return end
-	local key = "EnchantLucky"..(Index or "")
-	Hum:SetAttribute(key.."_CritChance", nil)
-	Hum:SetAttribute(key.."_Luck", nil)
-end
-
--- AccessoryManaflow ----------------------------------------------------------
--- Manaflow: on-hit bonus damage proportional to current mana (on-hit, like Void but no mana cost).
-local ManaflowCds = {}
-function Suites:AccessoryManaflow(Player, Tool, MobInstance, Level, P)
-	local Enemy = MobInstance and MobInstance:FindFirstChild("Enemy") :: Humanoid
+--[[
+	"Lightning" suite — builds static charge, unleashing heavy burst damage after enough hits.
+	Properties:
+	  RequiredHits  number   hits needed to proc burst (default 4)
+	  BurstDamage   number   burst damage base × Level (default 25)
+]]
+local StaticCharges = {} -- [userId_mobId] = {hits, expiry}
+function Suites:Lightning(Player, Tool, MobInstance, Level, P)
+	local Enemy = MobInstance:FindFirstChild("Enemy") :: Humanoid
 	if not Enemy or Enemy.Health <= 0 then return end
-	local now = os.clock(); local uid = Player.UserId
-	local cd  = P.Cooldown or 1.5
-	if ManaflowCds[uid] and ManaflowCds[uid] > now then return end
-	ManaflowCds[uid] = now + cd
-	local Hum     = (Player.Character or {}).Humanoid
-	local ManaF   = Hum and Hum:FindFirstChild("Mana")
-	local ManaSub = ManaF and ManaF:FindFirstChild("Mana")
-	if not ManaSub then return end
-	local cur = ManaSub:GetAttribute("Default") or 0
-	if cur <= 0 then return end
-	local bonus = math.max(1, math.round(cur * (P.DamagePerMana or 0.03) * Level))
-	local mob = Mobs()[MobInstance]
-	if mob then DamageLib():DamageMob(Player, mob, {Damage=bonus, NoHitSound=true, Ignore=true}) end
-end
 
--- AccessoryIronhide ----------------------------------------------------------
--- Ironhide: bonus MaxHP + low-HP defense attribute.
-function Suites:AccessoryIronhide(Player, _, Level, P, Index)
-	local Hum = (Player.Character or {}).Humanoid :: Humanoid; if not Hum then return end
-	local key = "EnchantIronhide"..(Index or "")
-	local Attr = Hum:FindFirstChild("Attributes")
-	if Attr and Attr:FindFirstChild("Health") then Attr.Health:SetAttribute(key, (P.BonusHealth or 30)*Level) end
-	Hum:SetAttribute(key.."_LowHPDef",       (P.LowHPDefenseBonus or 0.08)*Level)
-	Hum:SetAttribute(key.."_LowHPThreshold", P.LowHPThreshold or 0.40)
-end
-function Suites:AccessoryIronhide_Clear(Player, Index)
-	local Hum = (Player.Character or {}).Humanoid; if not Hum then return end
-	local key = "EnchantIronhide"..(Index or "")
-	local Attr = Hum:FindFirstChild("Attributes")
-	if Attr and Attr:FindFirstChild("Health") then Attr.Health:SetAttribute(key, nil) end
-	Hum:SetAttribute(key.."_LowHPDef", nil)
-	Hum:SetAttribute(key.."_LowHPThreshold", nil)
-end
+	local requiredHits = P.RequiredHits or 4
+	local burstDamage  = (P.BurstDamage or 25) * Level
 
--- AccessorySoulbound ---------------------------------------------------------
--- Soulbound: intercepts lethal damage → brief immunity window (once per long cooldown).
-local SoulboundCds = {}
-function Suites:AccessorySoulbound(Player, _, Level, P, Index)
-	local connKey = "Soulbound"..(Index or "")
-	ArmorClearConn(Player, connKey)
-	local Char = Player.Character
-	local Hum  = Char and Char:FindFirstChild("Humanoid") :: Humanoid
-	if not Hum or Hum.Health <= 0 then return end
-	local dur = (P.ImmunityDuration or 2.5) * (1 + 0.5*(Level-1))
-	local cd  = P.Cooldown or 90
-	local uid = tostring(Player.UserId)
-	local immune = false
-	local prev   = Hum.Health
-	local conn = Hum.HealthChanged:Connect(function(new)
-		if immune then if new <= 0 then Hum.Health = 1 end; return end
-		local delta = prev - new; prev = new
-		if new > 0 then return end
-		-- lethal damage
-		local now = os.clock()
-		if SoulboundCds[uid] and SoulboundCds[uid] > now then return end
-		SoulboundCds[uid] = now + cd
-		Hum.Health = 1; prev = 1; immune = true
-		local saved = {}
-		if Char then
-			for _, p in Char:GetDescendants() do
-				if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
-					saved[p] = p.Color; p.Color = Color3.fromRGB(220,80,255)
-				end
+	local key = tostring(Player.UserId) .. tostring(MobInstance)
+	local now = os.clock()
+
+	local charge = StaticCharges[key]
+	if not charge or charge.expiry <= now then
+		charge = { hits = 0, expiry = now + 5 }
+		StaticCharges[key] = charge
+	end
+
+	charge.hits = charge.hits + 1
+	charge.expiry = now + 5
+
+	if charge.hits >= requiredHits then
+		-- Proc Lightning
+		StaticCharges[key] = nil
+		DamageTick(Player, MobInstance, burstDamage)
+
+		local origColors = {}
+		for _, part in MobInstance:GetDescendants() do
+			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+				origColors[part] = part.Color
+				part.Color = Color3.fromRGB(255, 255, 100)
 			end
 		end
-		task.delay(dur, function()
-			immune = false
-			for p,c in saved do if p and p.Parent then p.Color = c end end
+		
+		if Effects:FindFirstChild("Lightning") then
+			AddParticles(MobInstance, 0.5, Effects.Lightning)
+		end
+
+		task.delay(0.15, function()
+			for part, orig in origColors do
+				if part and part.Parent then part.Color = orig end
+			end
 		end)
-	end)
-	ArmorStoreConn(Player, connKey, conn)
+	else
+		-- Spark visual
+		for _, part in MobInstance:GetDescendants() do
+			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+				part.Color = Color3.fromRGB(200, 200, 180)
+			end
+		end
+		task.delay(0.1, function()
+			for _, part in MobInstance:GetDescendants() do
+				if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+					part.Color = BrickColor.new("Medium stone grey").Color
+				end
+			end
+		end)
+	end
 end
-function Suites:AccessorySoulbound_Clear(Player, Index)
-	ArmorClearConn(Player, "Soulbound"..(Index or ""))
+
+--[[
+	"Execute" suite — deals bonus damage based on the mob's missing health.
+	Properties:
+	  MissingHealthPercent number (default 0.05)
+	  MaxExecuteDamage     number max cap (default 100)
+]]
+function Suites:Execute(Player, Tool, MobInstance, Level, P)
+	local Enemy = MobInstance:FindFirstChild("Enemy") :: Humanoid
+	if not Enemy or Enemy.Health <= 0 then return end
+
+	local pct = (P.MissingHealthPercent or 0.05) * Level
+	local maxBonus = (P.MaxExecuteDamage or 100) * Level
+
+	local missingHealth = Enemy.MaxHealth - Enemy.Health
+	if missingHealth <= 0 then return end
+
+	local bonusDamage = missingHealth * pct
+	bonusDamage = math.clamp(bonusDamage, 0, maxBonus)
+	
+	if bonusDamage >= 1 then
+		DamageTick(Player, MobInstance, math.round(bonusDamage))
+		
+		local origColors = {}
+		for _, part in MobInstance:GetDescendants() do
+			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+				origColors[part] = part.Color
+				part.Color = Color3.fromRGB(150, 0, 0)
+			end
+		end
+		task.delay(0.15, function()
+			for part, orig in origColors do
+				if part and part.Parent then part.Color = orig end
+			end
+		end)
+	end
+end
+
+--[[
+	"Manasteal" suite — restores the player's mana on hit.
+	Properties:
+	  FlatMana number  base mana restored per hit × Level (default 2)
+]]
+function Suites:Manasteal(Player, Tool, MobInstance, Level, P)
+	local Character = Player.Character
+	local Humanoid  = Character and Character:FindFirstChild("Humanoid")
+	local ManaFolder = Humanoid and Humanoid:FindFirstChild("Mana")
+	local ManaSub    = ManaFolder and ManaFolder:FindFirstChild("Mana")
+	local MaxManaSub = ManaFolder and ManaFolder:FindFirstChild("Max")
+	if not ManaSub or not MaxManaSub then return end
+
+	local flatMana = (P.FlatMana or 2) * Level
+	local currentMana = ManaSub:GetAttribute("Default") or 0
+	local maxMana = MaxManaSub:GetAttribute("Default") or 100
+
+	if currentMana < maxMana then
+		local newMana = math.min(maxMana, currentMana + flatMana)
+		ManaSub:SetAttribute("Default", newMana)
+	end
 end
 
 return Suites
-

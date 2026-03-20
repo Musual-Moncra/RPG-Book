@@ -48,8 +48,6 @@ local Interactions = {}
 
 task.spawn(function()
 	while true do
-		Interactions = {}
-
 		task.wait(GameConfig.MaxDamageInteractions[2])
 	end
 end)

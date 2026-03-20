@@ -45,7 +45,7 @@ local GameConfig = {
 	---- Multiplier & classes configuration
 	
 	ClassBoosts = {"Magic", "Melee", "Ranged", "Mana", "All"}, -- Add a value here to implement new classes (mana & all aren't a class)
-	Statistics = {"Defense"}, -- Potion status effect UI
+	Statistics = {"Defense", "Agility", "Experience", "Luck"}, -- Potion status effect UI
 	
 	XPMultiplier = 1,
 	GoldMultiplier = 1,
@@ -257,6 +257,22 @@ local GameConfig = {
 		},
 
 		["Health"] = {
+			MaxTimer = 3_600,
+		},
+
+		["Defense"] = {
+			MaxTimer = 3_600,
+		},
+
+		["Agility"] = {
+			MaxTimer = 3_600,
+		},
+
+		["Experience"] = {
+			MaxTimer = 3_600,
+		},
+
+		["Luck"] = {
 			MaxTimer = 3_600,
 		},
 	},
@@ -799,284 +815,109 @@ local GameConfig = {
 					},
 				},
 
-				-- Thunder: chain lightning — iron + gold, needs a sacrificial sword
-				Thunder = {
-					Description = "Calls down a lightning bolt on hit that chains to nearby enemies, dealing reduced damage with each hop.",
-					Color       = Color3.fromRGB(255, 240, 60),
+				-- Poisonous: toxic venom — nature damage over time
+				Poisonous = {
+					Description = "Coats the weapon in toxic venom, dealing nature damage over a long duration.",
+					Color       = Color3.fromRGB(50, 200, 50),
 					ValidTypes  = { Tool = true, Spell = true },
 					MaxLevel    = 3,
 					PerLevelStats = {
-						Damage     = {"Multiply", 1.07},
-						CritChance = {"Add", 2},
+						Damage = {"Multiply", 1.05},
 					},
-					Suite = {"Thunder", {
-						Damage      = 6,
-						ChainCount  = 2,
-						ChainRadius = 12,
-						ChainDecay  = 0.6,
-						Cooldown    = 1.5,
-					}},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 50} }, Material = { {"Iron", 10} }, Tool = { {"Bronze Sword", 1} } },
-						[2] = { Statistics = { {"Gold", 30} }, Material = { {"Iron", 6} } },
-					},
-				},
-
-				-- Poisoned: venom — stone (natural poison) + iron to bind
-				Poisoned = {
-					Description = "Coats the blade in venom. Each hit adds a poison stack; stacks increase damage each tick.",
-					Color       = Color3.fromRGB(80, 200, 80),
-					ValidTypes  = { Tool = true },
-					MaxLevel    = 3,
-					PerLevelStats = { Damage = {"Multiply", 1.05} },
 					Suite = {"Poison", {
-						MaxStacks  = 6,
-						TickDamage = 1.5,
-						Ticks      = 5,
-						Delay      = 0.8,
+						Ticks         = 10,
+						Delay         = 1.0,
+						Damage        = 2,
 					}},
 					Cost = {
-						[1] = { Statistics = { {"Gold", 30} }, Material = { {"Stone", 8}, {"Iron", 4} } },
-						[2] = { Statistics = { {"Gold", 18} }, Material = { {"Stone", 4}, {"Iron", 2} } },
+						[1] = {
+							Statistics = { {"Gold", 30} },
+							Material   = { {"Iron", 3} },
+						},
+						[2] = {
+							Statistics = { {"Gold", 20} },
+							Material   = { {"Iron", 2} },
+						},
 					},
 				},
 
-				-- Thorns: retributive aura — iron chains + gold for the binding ritual
-				Thorns = {
-					Description = "Wraps the wielder in a thorn aura after each strike. Incoming damage is reflected back at nearby enemies.",
-					Color       = Color3.fromRGB(200, 180, 50),
-					ValidTypes  = { Tool = true, Armor = true },
+				-- Thundering: electric enchant — static charge burst
+				Thundering = {
+					Description = "Builds static charge per strike. Unleashes a lightning burst for heavy damage after enough hits.",
+					Color       = Color3.fromRGB(255, 255, 50),
+					ValidTypes  = { Tool = true, Spell = true },
 					MaxLevel    = 3,
-					PerLevelStats = { Damage = {"Add", 3} },
-					Suite = {"Thorns", {
-						ReflectPercent = 0.35,
-						Duration       = 3,
-						Radius         = 10,
-						Cooldown       = 4,
+					PerLevelStats = {
+						Damage     = {"Multiply", 1.06},
+						CritChance = {"Add", 3},
+					},
+					Suite = {"Lightning", {
+						RequiredHits = 4,
+						BurstDamage  = 25,
 					}},
 					Cost = {
-						[1] = { Statistics = { {"Gold", 45} }, Material = { {"Iron", 12} } },
-						[2] = { Statistics = { {"Gold", 25} }, Material = { {"Iron", 7} } },
+						[1] = {
+							Statistics = { {"Gold", 45} },
+							Material   = { {"Iron", 8} },
+						},
+						[2] = {
+							Statistics = { {"Gold", 25} },
+							Material   = { {"Iron", 4} },
+						},
 					},
 				},
 
-				-- Shadow: dark art — iron + sacrificial bronze sword
-				Shadow = {
-					Description = "Each strike builds shadow momentum. Stacks deal increasing bonus damage per hit; stacks decay on inactivity.",
-					Color       = Color3.fromRGB(80, 0, 120),
+				-- Reaping: dark execution enchant
+				Reaping = {
+					Description = "The weapon senses weakness, dealing bonus damage based on the enemy's missing health.",
+					Color       = Color3.fromRGB(80, 0, 0),
 					ValidTypes  = { Tool = true },
 					MaxLevel    = 3,
-					PerLevelStats = { Damage = {"Multiply", 1.05} },
-					Suite = {"Shadow", {
-						DamagePerStack = 2,
-						MaxStacks      = 5,
-						DecayDelay     = 2.5,
-					}},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 55} }, Material = { {"Iron", 10} }, Tool = { {"Bronze Sword", 1} } },
-						[2] = { Statistics = { {"Gold", 35} }, Material = { {"Iron", 6} } },
-					},
-				},
-
-				-- Shockwave: earth force — heavy stone cost + iron to channel
-				Shockwave = {
-					Description = "Releases a ground shockwave on hit, dealing AoE damage and launching nearby enemies into the air.",
-					Color       = Color3.fromRGB(220, 200, 140),
-					ValidTypes  = { Tool = true, Spell = true },
-					MaxLevel    = 3,
 					PerLevelStats = {
-						Damage         = {"Multiply", 1.06},
-						KnockbackForce = {"Multiply", 1.10},
+						Damage = {"Multiply", 1.05},
 					},
-					Suite = {"Shockwave", {
-						Radius     = 10,
-						Damage     = 6,
-						KBForce    = 60,
-						KBDuration = 0.4,
-						Cooldown   = 2,
+					Suite = {"Execute", {
+						MissingHealthPercent = 0.05,
+						MaxExecuteDamage = 150,
 					}},
 					Cost = {
-						[1] = { Statistics = { {"Gold", 40} }, Material = { {"Stone", 12}, {"Iron", 6} } },
-						[2] = { Statistics = { {"Gold", 22} }, Material = { {"Stone", 6}, {"Iron", 3} } },
+						[1] = {
+							Statistics = { {"Gold", 55} },
+							Material   = { {"Iron", 10}, {"Stone", 10} },
+						},
+						[2] = {
+							Statistics = { {"Gold", 30} },
+							Material   = { {"Iron", 5}, {"Stone", 5} },
+						},
 					},
 				},
 
-				-- Soulrip: death ritual — iron sword sacrifice + high gold cost
-				Soulrip = {
-					Description = "Marks an enemy's soul on hit. When the marked enemy dies, you reap bonus Gold and XP from the kill.",
-					Color       = Color3.fromRGB(140, 0, 220),
+				-- Siphoning: steals mana on hit
+				Siphoning = {
+					Description = "Drains magical energy from enemies, restoring your mana on each hit.",
+					Color       = Color3.fromRGB(50, 100, 255),
 					ValidTypes  = { Tool = true, Spell = true },
-					MaxLevel    = 3,
-					PerLevelStats = {
-						Damage     = {"Multiply", 1.04},
-						CritChance = {"Add", 1},
+					Levels = {
+						[1] = { Damage = {"Multiply", 1.02} },
+						[2] = { Damage = {"Multiply", 1.04}, CritChance = {"Add", 2} },
+						[3] = { Damage = {"Multiply", 1.06}, CritChance = {"Add", 4} },
 					},
-					Suite = {"Soulrip", {
-						GoldBonus    = 10,
-						XPBonus      = 15,
-						MarkDuration = 5,
+					Suite = {"Manasteal", {
+						FlatMana = 2,
 					}},
 					Cost = {
-						[1] = { Statistics = { {"Gold", 70} }, Material = { {"Iron", 15} }, Tool = { {"Iron Sword", 1} } },
-						[2] = { Statistics = { {"Gold", 45} }, Material = { {"Iron", 9} } },
+						[1] = {
+							Statistics = { {"Gold", 35} },
+							Material   = { {"Iron", 4} },
+						},
+						[2] = {
+							Statistics = { {"Gold", 20} },
+							Material   = { {"Iron", 2} },
+						},
 					},
 				},
 
-				-- ================================================================
-				--  ARMOR ENCHANTS  (ValidTypes = { Armor = true })
-				--  Suites live in ArmorEnchantSuites.lua
-				-- ================================================================
-
-				IronWill = {
-					Description = "Hardens the wearer's body, granting a flat boost to max HP and noticeably increasing Defense.",
-					Color       = Color3.fromRGB(180, 200, 220),
-					ValidTypes  = { Armor = true },
-					MaxLevel    = 3,
-					Suite = {"ArmorFortify", { BonusHealth = 25, BonusDefense = 0.05 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 35} }, Material = { {"Iron", 8} } },
-						[2] = { Statistics = { {"Gold", 20} }, Material = { {"Iron", 5} } },
-					},
-				},
-
-				Bulwark = {
-					Description = "Forms an absorbing barrier when taking a hit. The shield absorbs a portion of damage before HP is reduced.",
-					Color       = Color3.fromRGB(100, 140, 200),
-					ValidTypes  = { Armor = true },
-					MaxLevel    = 3,
-					Suite = {"ArmorShield", { AbsorbFraction = 0.18, MaxAbsorb = 40, Cooldown = 6 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 50} }, Material = { {"Stone", 12}, {"Iron", 6} } },
-						[2] = { Statistics = { {"Gold", 30} }, Material = { {"Stone", 6}, {"Iron", 3} } },
-					},
-				},
-
-				Regeneration = {
-					Description = "Accelerates the wearer's natural HP regen. After not taking damage for a few seconds, healing pulses resume at a higher rate.",
-					Color       = Color3.fromRGB(80, 220, 120),
-					ValidTypes  = { Armor = true },
-					MaxLevel    = 3,
-					Suite = {"ArmorRegen", { HealPerTick = 4, TickInterval = 2, DelayAfterDmg = 4 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 40} }, Material = { {"Stone", 10}, {"Iron", 4} } },
-						[2] = { Statistics = { {"Gold", 22} }, Material = { {"Stone", 5}, {"Iron", 2} } },
-					},
-				},
-
-				Warden = {
-					Description = "When struck, the Warden's armor fights back — releasing a burst of damage to all nearby enemies.",
-					Color       = Color3.fromRGB(210, 175, 55),
-					ValidTypes  = { Armor = true },
-					MaxLevel    = 3,
-					Suite = {"ArmorRetribution", { RetaliationDamage = 12, Radius = 8, Cooldown = 3 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 55} }, Material = { {"Iron", 14} }, Tool = { {"Bronze Sword", 1} } },
-						[2] = { Statistics = { {"Gold", 32} }, Material = { {"Iron", 7} } },
-					},
-				},
-
-				GlacialPlate = {
-					Description = "The armor radiates cold, slowing any enemy that strikes the wearer. Repeated hits stack more chill on the attacker.",
-					Color       = Color3.fromRGB(160, 225, 255),
-					ValidTypes  = { Armor = true },
-					MaxLevel    = 3,
-					Suite = {"ArmorChillAura", { SlowPerHit = -4, MaxSlow = -20, Duration = 3.5, Cooldown = 1.5 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 45} }, Material = { {"Stone", 15}, {"Iron", 6} } },
-						[2] = { Statistics = { {"Gold", 28} }, Material = { {"Stone", 8}, {"Iron", 3} } },
-					},
-				},
-
-				Spellward = {
-					Description = "Weaves a ward of resistance into the armor, reducing magic (Spell) damage the wearer takes.",
-					Color       = Color3.fromRGB(190, 100, 255),
-					ValidTypes  = { Armor = true },
-					MaxLevel    = 3,
-					Suite = {"ArmorSpellward", { MagicDamageReduction = 0.10, MaxReduction = 0.40 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 60} }, Material = { {"Iron", 12} } },
-						[2] = { Statistics = { {"Gold", 35} }, Material = { {"Iron", 6} } },
-					},
-				},
-
-				-- ================================================================
-				--  ACCESSORY ENCHANTS  (ValidTypes = { Accessory = true })
-				--  Suites live in ArmorEnchantSuites.lua
-				-- ================================================================
-
-				Swiftfoot = {
-					Description = "Enchants footwear or charms to boost movement speed and jump height.",
-					Color       = Color3.fromRGB(130, 255, 200),
-					ValidTypes  = { Accessory = true },
-					MaxLevel    = 3,
-					Suite = {"AccessorySwift", { BonusSpeed = 2, BonusJump = 3 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 30} }, Material = { {"Stone", 6}, {"Iron", 3} } },
-						[2] = { Statistics = { {"Gold", 18} }, Material = { {"Stone", 3}, {"Iron", 2} } },
-					},
-				},
-
-				ArcaneVessel = {
-					Description = "Expands the mana reserve of the wearer and passively speeds up mana recovery after spending it.",
-					Color       = Color3.fromRGB(120, 160, 255),
-					ValidTypes  = { Accessory = true },
-					MaxLevel    = 3,
-					Suite = {"AccessoryManaVessel", { BonusMaxMana = 20, ManaRegenBonus = 0.15 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 45} }, Material = { {"Iron", 8} } },
-						[2] = { Statistics = { {"Gold", 25} }, Material = { {"Iron", 4} } },
-					},
-				},
-
-				LuckyCharm = {
-					Description = "Blesses the wearer with fortune, increasing critical hit chance and boosting drop luck.",
-					Color       = Color3.fromRGB(255, 220, 60),
-					ValidTypes  = { Accessory = true },
-					MaxLevel    = 3,
-					Suite = {"AccessoryLuck", { BonusCritChance = 3, LuckBonus = 0.10 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 25} }, Material = { {"Stone", 5}, {"Iron", 2} } },
-						[2] = { Statistics = { {"Gold", 15} }, Material = { {"Stone", 3} } },
-					},
-				},
-
-				Manaflow = {
-					Description = "Channels mana into each strike. Deals bonus damage equal to a fraction of the wearer's current mana.",
-					Color       = Color3.fromRGB(80, 190, 255),
-					ValidTypes  = { Accessory = true },
-					MaxLevel    = 3,
-					Suite = {"AccessoryManaflow", { DamagePerMana = 0.03, Cooldown = 1.5 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 50} }, Material = { {"Iron", 10} } },
-						[2] = { Statistics = { {"Gold", 28} }, Material = { {"Iron", 5} } },
-					},
-				},
-
-				Ironhide = {
-					Description = "Toughens the wearer's skin. Grants bonus max HP and extra defense the lower their HP drops.",
-					Color       = Color3.fromRGB(160, 130, 100),
-					ValidTypes  = { Accessory = true },
-					MaxLevel    = 3,
-					Suite = {"AccessoryIronhide", { BonusHealth = 30, LowHPDefenseBonus = 0.08, LowHPThreshold = 0.40 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 40} }, Material = { {"Stone", 10}, {"Iron", 8} } },
-						[2] = { Statistics = { {"Gold", 24} }, Material = { {"Stone", 5}, {"Iron", 4} } },
-					},
-				},
-
-				Soulbound = {
-					Description = "Upon lethal damage, activates a death shield — briefly making the wearer immune. Once per long cooldown.",
-					Color       = Color3.fromRGB(220, 80, 255),
-					ValidTypes  = { Accessory = true },
-					MaxLevel    = 3,
-					Suite = {"AccessorySoulbound", { ImmunityDuration = 2.5, Cooldown = 90 }},
-					Cost = {
-						[1] = { Statistics = { {"Gold", 80} }, Material = { {"Iron", 18} }, Tool = { {"Iron Sword", 1} } },
-						[2] = { Statistics = { {"Gold", 50} }, Material = { {"Iron", 10} } },
-					},
-				},
-
-		}, -- Enchants
+			}, -- Enchants
 
 		}, -- EnchantConfig
 	
