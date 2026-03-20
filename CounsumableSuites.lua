@@ -111,24 +111,6 @@ function Consumes:Strength(Player, Tool, Properties)
 	Effect:SetAttribute("Duration", Effect:GetAttribute("Duration") + Duration)
 end
 
-function Consumes:Defense(Player, Tool, Properties)
-	if string.find(Tool.Name, "Potion") then PotionBase(Tool) end
-	
-	local Boost = Properties.Boost
-	local Duration = Properties.Duration
-	
-	local Statuses = Player:WaitForChild("Statuses", 1)
-	if not Statuses then 
-		return 
-	end
-	
-	local Effect = Statuses:WaitForChild("Defense")
-	if Effect then
-		Effect:SetAttribute("Duration", Effect:GetAttribute("Duration") + Duration)
-		Effect:SetAttribute("Boost", Boost)
-	end
-end
-
 function Consumes:Experience(Player, Tool, Properties)
 	if string.find(Tool.Name, "Potion") then PotionBase(Tool) end
 	
