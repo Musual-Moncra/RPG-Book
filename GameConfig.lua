@@ -1,14 +1,15 @@
 local GameConfig = {
 
 	-- General
-	GameName = "My RPG",
-	GameVersion = "v1.0.0", -- Shown faintly at the top center of the screen to identify the server/update version
+	GameName = "Haux RPG",
+	GameVersion = "Beta Version", -- Shown faintly at the top center of the screen to identify the server/update version
 
-	XPModifier = "Multiply", -- Set tp "Multiply" if XP goes from 25, 50, 75, 100 w/ default range. Set to "Exponential" if it goes from 5, 25, 125, 625, etc. 
-	XPPerLevel = 25, -- The amount of XP needed for each level to level up. With 50, if you're level 5, you need 250 XP to level up to 6 [Reccomended 1.25 for Exponential]
+	XPModifier = "Exponential", -- Set tp "Multiply" if XP goes from 25, 50, 75, 100 w/ default range. Set to "Exponential" if it goes from 5, 25, 125, 625, etc. 
+	XPPerLevel = 1.25, -- The amount of XP needed for each level to level up. With 50, if you're level 5, you need 250 XP to level up to 6 [Reccomended 1.25 for Exponential]
 
-	MaxLevel = math.huge, -- The maximum level you can have before it's capped
-	MaxGold = math.huge, -- Implementation from the old kit
+	MaxLevel = 100, -- The maximum level you can have before it's capped
+	MaxGold = 2000000, -- Implementation from the old kit
+	MaxXP = 100 ^ 1.25,
 
 	SpawnLocation = Vector3.new(0.494, 1, 35.757), -- Position that TP To Spawn will bring you to, set to nil to use a random SpawnLocation instead
 
@@ -41,8 +42,8 @@ local GameConfig = {
 		["Step"] = 1, -- Seconds duration
 	},
 
-	HealthPerLevel = 10, -- Set to 0 to disable
-	ManaPerLevel = 10, -- Set to 0 to disable
+	HealthPerLevel = 25, -- Set to 0 to disable
+	ManaPerLevel = 15, -- Set to 0 to disable
 
 	---- Multiplier & classes configuration
 
@@ -55,10 +56,10 @@ local GameConfig = {
 	LuckMultiplier = 1, -- Affects drops and global drops
 	CriticalMultiplier = 2, -- Base value is *2
 
-	CriticalChance = {1, 5}, -- random(1, 2)
+	CriticalChance = {1, 100}, -- random(1, 2)
 
-	MaxDamageInteractions = {20, 5}, -- How many times can the player damage (1) per (2) seconds?
-	MaxInputInteractions = {20, 5}, -- Max / time per second for callbacks, keybinds, & blocking / parrying
+	MaxDamageInteractions = {10, 1}, -- How many times can the player damage (1) per (2) seconds?
+	MaxInputInteractions = {10, 1}, -- Max / time per second for callbacks, keybinds, & blocking / parrying
 
 	---- Interface visibility
 
@@ -106,7 +107,7 @@ local GameConfig = {
 	MobileAdaptUI = true, -- UI will slightly change to fit mobile screens better
 	MobileShiftLock = true, -- Whether mobile players are given the option to enable shift lock via a UI
 
-	PCAndConsoleMaxSlots = 9, -- Maximum slots for pc/console (non mobile)
+	PCAndConsoleMaxSlots = 6, -- Maximum slots for pc/console (non mobile)
 	MobileUsesLessSlots = true, -- Toggle for mobile to have 3 hotbar slots (same as regular backpack) to conserve space on player UI
 
 	ServerDropNotifications = true, -- Set to false to disable all drop notifications
@@ -145,7 +146,7 @@ local GameConfig = {
 
 	AdaptiveDamageIndicator = true, -- Damage indicator colors change w/ percentage of mob's health
 
-	MissColor = Color3.fromRGB(101, 134, 255),
+	MissColor = Color3.fromRGB(239, 186, 233),
 	WarningColor = Color3.fromRGB(255, 0, 0),
 	CriticalColor = Color3.fromRGB(255, 209, 102),
 	DamageIndicatorColor = Color3.fromRGB(255, 0, 0), -- Enables if AdaptiveDamageIndicator set to false
@@ -234,7 +235,7 @@ local GameConfig = {
 	AutoCompleteQuests = true, -- Whether quests will automatically complete when finished
 	DisableWeaponSwitching = true, -- Can the player spam multiple swords w/o being penalized for cooldown
 	LockKeybindWeapon = true, -- If true, players cannot switch weapons while a keybind is active. If false, switching weapons cancels the keybind instead.
-	CanRequestItemWithNoAmountInput = false, -- If enabled, can buy/sell/craft an item w/ count of 1 if the amount input in Amount TextBox is nothing
+	CanRequestItemWithNoAmountInput = true, -- If enabled, can buy/sell/craft an item w/ count of 1 if the amount input in Amount TextBox is nothing
 
 	HumanoidStatsRefreshWhenAdded = true, -- Attributes like health/mana will stay max if you add to max mana/max hp if enabled to true; else, only changes max attribute
 
@@ -247,31 +248,27 @@ local GameConfig = {
 	]]
 	Boosts = {
 		["Strength"] = {
-			MaxTimer = 3_600,
+			MaxTimer = (3600 * 24 * 7),
 		},
 
 		["Mana"] = {
-			MaxTimer = 3_600,
+			MaxTimer = (3600 * 24 * 7),
 		},
 
 		["Regeneration"] = {
-			MaxTimer = 3_600, 
+			MaxTimer = (3600 * 24 * 7), 
 		},
 
 		["Health"] = {
-			MaxTimer = 3_600,
-		},
-		
-		["Agility"] = {
-			MaxTimer = 3_600,
+			MaxTimer = (3600 * 24 * 7),
 		},
 
 		["Experience"] = {
-			MaxTimer = 3_600,
+			MaxTimer = (3600 * 24 * 7),
 		},
 
 		["Luck"] = {
-			MaxTimer = 3_600,
+			MaxTimer = (3600 * 24 * 7),
 		},
 	},
 
@@ -294,22 +291,22 @@ local GameConfig = {
 		},
 
 		["XP"] = {
-			ShowInPlayerList = true,
-			PlayerListOrder = 2,
+			ShowInPlayerList = false,
+			PlayerListOrder = nil,
 
-			Constraint = {0, nil},
+			Constraint = {0, true},
 		},
 
 		["Gold"] = {
 			ShowInPlayerList = true,
-			PlayerListOrder = 3,
+			PlayerListOrder = 2,
 
 			Constraint = {0, true},
 		},
 
 		["Kills"] = {
-			ShowInPlayerList = false,
-			PlayerListOrder = nil,
+			ShowInPlayerList = true,
+			PlayerListOrder = 3,
 
 			Constraint = nil,
 		},
@@ -359,10 +356,10 @@ local GameConfig = {
 			LayoutOrder = 1,
 
 			Boost = {0.25, 0.015}, 
-			Amplifier = 1, 
-			MaxAllocated = math.huge,
+			Amplifier = 3, 
+			MaxAllocated = 25,
 
-			MethodOfGain = "Add",
+			MethodOfGain = "Mutiply",
 		},
 
 		["Constitution"] = {
@@ -371,7 +368,7 @@ local GameConfig = {
 
 			Boost = {10, 0.05}, 
 			Amplifier = 1,
-			MaxAllocated = math.huge,
+			MaxAllocated = 25,
 
 			MethodOfGain = "Add",
 		},
@@ -380,9 +377,9 @@ local GameConfig = {
 			Description = "Increases both MP regeneration speed and ceiling for Max MP.",
 			LayoutOrder = 3,
 
-			Boost = {10, 0.05}, 
-			Amplifier = 1, 
-			MaxAllocated = math.huge,
+			Boost = {22, 0.05}, 
+			Amplifier = 2, 
+			MaxAllocated = 25,
 
 			MethodOfGain = "Add",
 		},
@@ -391,15 +388,15 @@ local GameConfig = {
 			Description = "Both increases the chance to land a critical attack, and how much damage criticals do.",
 			LayoutOrder = 4,
 
-			Boost = {nil, 0.015},
-			Amplifier = 1, 
-			MaxAllocated = 75,
+			Boost = {nil, 0.005},
+			Amplifier = 5, 
+			MaxAllocated = 25,
 
 			MethodOfGain = "Multiply",
 		},
 	},
 
-	MethodOfGain = "Add", -- If set to 'Add', it'll use base values like +25 * points. If set to 'Multiply', it'll use proportionate values (e.g. 0.5x health).
+	MethodOfGain = "Mutiply", -- If set to 'Add', it'll use base values like +25 * points. If set to 'Multiply', it'll use proportionate values (e.g. 0.5x health).
 	PointValueIncrease = {1, "Linear"}, -- If 'Linear', how many levels equals one point. If 'Magnitude', how many orders of magnitude (x^Points) equals one point per difference.
 
 	--------------------------------------------------------------------------------

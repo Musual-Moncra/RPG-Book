@@ -34,7 +34,7 @@ function Keybind:OnLetGo(Player, Snapshot)
 					Knockback:Activate(MobTorso, 2, Origin - Vector3.new(0, 10, 0), MobTorso.Position)
 					
 					Damage:DamageMobSkill(Player, MobList[MobInstance], {
-						Damage = 45,
+						Damage = 20,
 						Tool = Tool,
 						SkillScaling = {
 							["Intelligence"] = { Type = "Attributes", Additive = 1.0, Cap = 250 },
